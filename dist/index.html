@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#101720" />
+  <meta name="description" content="Pace turns your schedule, habits and daily health check-ins into a plan that fits today." />
+  <title>Pace — Your day, in rhythm</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23101720'/%3E%3Cpath d='M12 34h11l6-14 8 25 6-11h9' fill='none' stroke='%23d5f36a' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <svg class="icon-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18M6 16l4-5 4 3 4-8"/><circle cx="6" cy="16" r="1"/><circle cx="10" cy="11" r="1"/><circle cx="14" cy="14" r="1"/><circle cx="18" cy="6" r="1"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3-7 8-7s8 3 8 7"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7z"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.5A8 8 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.4 5.6a5 5 0 0 0-7.1 0L12 7l-1.3-1.4a5 5 0 0 0-7.1 7.1L12 21l8.4-8.3a5 5 0 0 0 0-7.1Z"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M2 12h4l3-7 5 14 3-7h5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5l14 14M19 5 5 19"/></symbol>
+    <symbol id="i-watch" viewBox="0 0 24 24"><rect x="5" y="6" width="14" height="12" rx="3"/><path d="m8 6 1-4h6l1 4m-8 12 1 4h6l1-4"/><path d="M8 12h2l1.5-2 2 4 1.5-2H17"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 2.1 7.9L22 12l-7.9 2.1L12 22l-2.1-7.9L2 12l7.9-2.1Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard" aria-label="Pace home"><span class="brand-mark"><svg><use href="#i-activity"/></svg></span><span>pace<span class="brand-dot">.</span></span></a>
+      <div class="side-label">YOUR SPACE</div>
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Overview</span></button>
+        <button class="nav-item" data-view="insights"><svg><use href="#i-chart"/></svg><span>Insights</span></button>
+        <button class="nav-item" data-view="plan"><svg><use href="#i-calendar"/></svg><span>My plan</span></button>
+        <button class="nav-item" data-view="profile"><svg><use href="#i-user"/></svg><span>Profile</span></button>
+      </nav>
+      <div class="side-bottom">
+        <div class="sidebar-coach"><span class="sidebar-coach-icon"><svg><use href="#i-spark"/></svg></span><p>Built around <strong>your real life.</strong><br/>Start with one check-in each day.</p></div>
+        <button class="side-user" id="side-user" data-open="setup"><span class="avatar" id="avatar">P</span><span><strong id="side-name">Your space</strong><small id="side-subtitle">Set up your profile</small></span><svg class="side-user-arrow"><use href="#i-arrow"/></svg></button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark"><svg><use href="#i-activity"/></svg></span>pace<span class="brand-dot">.</span></div>
+        <div class="topbar-left"><span class="eyebrow" id="today-date">SATURDAY, 26 SEPTEMBER</span><span class="topbar-separator"></span><span class="topbar-note" id="topbar-note">Your personal health companion</span></div>
+        <div class="topbar-actions"><span class="demo-pill" id="demo-pill">SAMPLE DATA</span><button class="icon-button" id="device-top" aria-label="Connect a device" data-open="device"><svg><use href="#i-watch"/></svg></button><button class="top-avatar" id="top-avatar" data-open="setup" aria-label="Edit your profile">P</button></div>
+      </header>
+
+      <div class="content">
+        <section class="view active" id="view-dashboard">
+          <div class="page-heading"><div><p class="kicker">YOUR DAILY BRIEFING</p><h1 id="greeting">Good morning. Let's find your pace.</h1><p class="heading-sub" id="heading-sub">A plan that moves with your energy, not against it.</p></div><button class="primary-button" data-open="checkin"><svg><use href="#i-plus"/></svg> Log today</button></div>
+          <div class="setup-banner" id="setup-banner"><div class="setup-banner-icon"><svg><use href="#i-spark"/></svg></div><div><strong>Make this yours in two quick steps</strong><p>Add your routine and health baseline to get advice based on your day.</p></div><button class="light-button" data-open="setup">Set up my profile <svg><use href="#i-arrow"/></svg></button></div>
+
+          <div class="dashboard-grid">
+            <article class="recovery-card"><div class="card-topline"><span>READINESS ESTIMATE</span><span class="card-menu">TODAY</span></div><div class="recovery-body"><div class="score-ring" id="score-ring"><div class="score-inner"><strong id="score-number">78</strong><span>out of 100</span></div></div><div class="score-detail"><div class="status-line"><span class="status-dot"></span><strong id="readiness-label">Ready to move</strong></div><p id="readiness-explain">Your recovery looks steady. You have room for a focused session today.</p><div class="score-trend"><svg><use href="#i-activity"/></svg><span id="score-basis">Based on sleep, energy and stress</span></div></div></div></article>
+            <article class="plan-card"><div class="card-topline"><span>YOUR PLAN FOR TODAY</span><svg class="small-spark"><use href="#i-spark"/></svg></div><div class="plan-main"><span class="plan-tag" id="plan-tag">MOVEMENT</span><h2 id="plan-title">A good day to get moving</h2><p id="plan-description">Keep the session manageable and leave some energy for the rest of your day.</p></div><div class="plan-footer"><div class="plan-time"><svg><use href="#i-clock"/></svg><span id="plan-time">30 min · Flexible timing</span></div><button class="text-button" data-view="plan">See your plan <svg><use href="#i-arrow"/></svg></button></div></article>
+          </div>
+
+          <div class="section-heading"><div><h2>Your signals</h2><p>The inputs shaping today's recommendation</p></div><button class="subtle-button" data-open="checkin">Update check-in <svg><use href="#i-arrow"/></svg></button></div>
+          <div class="metric-grid">
+            <article class="metric-card"><span class="metric-icon sleep"><svg><use href="#i-moon"/></svg></span><div><span class="metric-label">Sleep</span><strong id="metric-sleep">7h 42m</strong><small id="metric-sleep-note">Last night</small></div></article>
+            <article class="metric-card"><span class="metric-icon heart"><svg><use href="#i-heart"/></svg></span><div><span class="metric-label">Resting heart rate</span><strong id="metric-hr">58 <em>bpm</em></strong><small id="metric-hr-note">Your baseline</small></div></article>
+            <article class="metric-card"><span class="metric-icon energy"><svg><use href="#i-bolt"/></svg></span><div><span class="metric-label">Energy</span><strong id="metric-energy">Good</strong><small id="metric-energy-note">Self reported today</small></div></article>
+            <article class="metric-card"><span class="metric-icon activity"><svg><use href="#i-activity"/></svg></span><div><span class="metric-label">Activity</span><strong id="metric-activity">42 <em>min</em></strong><small id="metric-activity-note">Yesterday</small></div></article>
+          </div>
+
+          <div class="lower-grid"><article class="surface weekly-card"><div class="section-heading inner"><div><h2>This week at a glance</h2><p>Readiness from your recent check-ins</p></div><button class="subtle-button" data-view="insights">View insights <svg><use href="#i-arrow"/></svg></button></div><div class="chart" id="weekly-chart"></div><div class="chart-legend"><span class="legend-dot"></span> Daily readiness <span class="chart-note" id="chart-note">Sample week</span></div></article><article class="surface coach-card"><div class="coach-label"><svg><use href="#i-spark"/></svg> A NOTE FROM YOUR COACH</div><h2 id="coach-title">Consistency beats intensity.</h2><p id="coach-message">You don’t need to max out every day. Match effort to your energy, then build from there.</p><div class="coach-signature"><span class="coach-mini">P</span><span>Pace Coach</span></div></article></div>
+        </section>
+
+        <section class="view" id="view-insights"><div class="page-heading"><div><p class="kicker">YOUR PATTERNS</p><h1>Understand what moves you.</h1><p class="heading-sub">Small signals become useful patterns over time.</p></div><button class="primary-button" data-open="checkin"><svg><use href="#i-plus"/></svg> Log today</button></div><div class="insights-layout"><article class="surface insights-chart"><div class="section-heading inner"><div><h2>Readiness trend</h2><p id="insight-count">Your last 7 days</p></div></div><div class="chart large" id="insights-chart"></div></article><article class="surface insight-summary"><div class="coach-label"><svg><use href="#i-spark"/></svg> PATTERN AGENT</div><h2 id="pattern-title">Your baseline is taking shape</h2><p id="pattern-copy">Check in on a few more days and Pace can start showing how sleep, stress and energy move together for you.</p><div class="insight-progress"><div><span>Check-ins collected</span><strong id="checkin-count">0 / 3</strong></div><div class="progress-track"><span id="progress-fill"></span></div><small>Three days unlock your first personal pattern.</small></div></article></div><div class="section-heading"><div><h2>Recent check-ins</h2><p>Your own entries, newest first</p></div></div><div class="surface entry-list" id="entry-list"></div></section>
+
+        <section class="view" id="view-plan"><div class="page-heading"><div><p class="kicker">MADE FOR YOUR DAY</p><h1>A plan that fits your life.</h1><p class="heading-sub">Your schedule and recovery shape each suggestion.</p></div><button class="primary-button" data-open="checkin"><svg><use href="#i-plus"/></svg> Log today</button></div><div class="plan-view-grid"><article class="surface plan-feature"><div class="plan-feature-top"><span class="plan-tag">TODAY'S FOCUS</span><span id="plan-readiness" class="mini-score">78 readiness</span></div><h2 id="plan-page-title">A good day to get moving</h2><p id="plan-page-copy">Keep the session manageable and leave some energy for the rest of your day.</p><div class="plan-detail-row"><div><span>Suggested duration</span><strong id="plan-duration">30 minutes</strong></div><div><span>Best window</span><strong id="plan-window">Flexible timing</strong></div><div><span>Intensity</span><strong id="plan-intensity">Moderate</strong></div></div><button class="dark-button" id="complete-plan"><svg><use href="#i-check"/></svg><span id="complete-label">Mark as done</span></button></article><article class="surface schedule-card"><div class="section-heading inner"><div><h2>Your routine</h2><p>What the planner works around</p></div><button class="subtle-button" data-open="setup">Edit <svg><use href="#i-arrow"/></svg></button></div><div id="schedule-details"></div></article></div><div class="section-heading"><div><h2>How your plan comes together</h2><p>Six focused steps, with you in control</p></div></div><div class="agent-grid" id="agent-grid"></div></section>
+
+        <section class="view" id="view-profile"><div class="page-heading"><div><p class="kicker">YOUR FOUNDATION</p><h1>The person behind the numbers.</h1><p class="heading-sub">Your goals, habits and health details keep advice relevant.</p></div><button class="primary-button" data-open="setup">Edit profile <svg><use href="#i-arrow"/></svg></button></div><div class="profile-grid"><article class="surface profile-card"><div class="profile-header"><span class="profile-avatar" id="profile-avatar">P</span><div><h2 id="profile-name">Your profile</h2><p id="profile-goal">Add a goal to get started</p></div></div><div class="profile-details" id="profile-details"></div></article><article class="surface connection-card"><div class="device-icon"><svg><use href="#i-watch"/></svg></div><h2>Bring your device data in</h2><p>Connecting a wearable could let Pace use sleep, heart rate and activity automatically. Device syncing is not available in this prototype.</p><button class="outline-button" data-open="device">See device options <svg><use href="#i-arrow"/></svg></button></article></div><div class="privacy-note"><svg><use href="#i-heart"/></svg><div><strong>Your data stays in this browser</strong><p>This prototype saves entries locally on your device. It has no account, cloud sync, medical diagnosis or live device connection.</p></div></div><button class="reset-button" id="reset-data">Clear local data</button></section>
+      </div>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Mobile navigation"><button class="active" data-view="dashboard"><svg><use href="#i-grid"/></svg><span>Overview</span></button><button data-view="insights"><svg><use href="#i-chart"/></svg><span>Insights</span></button><button data-view="plan"><svg><use href="#i-calendar"/></svg><span>Plan</span></button><button data-view="profile"><svg><use href="#i-user"/></svg><span>Profile</span></button></nav>
+
+  <div class="modal-backdrop" id="modal-backdrop" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close" id="modal-close" aria-label="Close"><svg><use href="#i-close"/></svg></button><div id="modal-content"></div></div></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
