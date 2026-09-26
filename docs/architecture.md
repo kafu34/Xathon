@@ -1,6 +1,6 @@
 # Pace architecture
 
-Pace is a mobile-first website for a Singapore polytechnic or university hackathon demo. Its core decision is to keep fixed timetable events fixed and place small health suggestions in the gaps. The current hosted version is a browser-only prototype; `dist/services.js` contains the working reasoning modules, `dist/student.js` contains student flows, and `dist/app.js` contains the base dashboard and check-in UI.
+Pace is a mobile-first website for a Singapore polytechnic or university hackathon demo. Its core decision is to keep fixed timetable events fixed and place small health suggestions in the gaps. The browser keeps the user's profile and history locally; an opt-in Cloudflare Worker calls the OpenAI Responses API for model analysis and chat. `dist/services.js` contains timetable-safe planning modules, `dist/student.js` contains student flows, `dist/ai.js` handles opt-in AI UI, and `worker/index.js` implements the model gateway. `scripts/build-worker.mjs` bundles the UI and Worker into `dist/server/index.js` for Sites.
 
 ## Current flow
 
@@ -10,13 +10,14 @@ Student profile + ranked goals + confirmed timetable + normalized health entries
   → Health Agent (available sleep, activity, HR, steps, stress)
   → Pattern Agent (observations from this user's labelled history)
   → Planner Agent (today + next 3 days around fixed events)
-  → Coach Agent (plain explanations with evidence links)
+  → numeric short-horizon forecast from labelled personal data
+  → LLM analysis / Coach Agent (structured output, timetable validation, evidence links)
   → Student action / tracker demonstration
   → Learning Agent (completion history informs future duration)
   ↺ Pattern Agent
 ```
 
-These are software modules, not six separate large language models. The current Coach Agent uses inspectable response rules; it is explicitly labelled as demo reasoning. No medical prediction or clinical validation is claimed. A later backend may use **one general LLM** for explanations, grounded in structured plan facts and vetted source records, plus a per-user personalization layer. It should never train a separate foundation model for each student or pool one student's health entries into another student's context.
+These are software modules, not six separate large language models. One general LLM explains forecasts and replies to chat; structured personal data and the validated planner remain separate. The Worker accepts only selected fields, computes descriptive three-day ranges when at least four observations span three days, and asks the LLM to interpret those ranges. It uses a strict JSON schema, `store: false`, capped output, a server-held key, and a fixed source list. It rejects model-selected plan items that overlap fixed commitments and replaces unsafe medical or timetable-changing claims. No clinical accuracy or disease-risk prediction is claimed. The model is unavailable until the Site secret `OPENAI_API_KEY` is configured.
 
 ## Normalized tracker record
 
@@ -58,6 +59,7 @@ OCR on grid screenshots may be imperfect; the review step is mandatory. The uplo
 - The planner covers today and the next three days, uses lower effort when sleep/stress or temporary context warrants it, and offers general rest guidance when an injury or condition is reported.
 - Temporary periods are labelled. The student may pause baseline learning or build a separate temporary baseline; ending a period restores the regular baseline.
 - Personal pattern text is labelled as an observation, not causation. The readiness number is a demo heuristic, not a disease-risk score.
+- The student must opt in before selected health and timetable context is sent to the Worker and OpenAI. Name, school, height and weight are excluded from model requests. The Worker keeps no account history. The public hackathon endpoint has input bounds, a same-origin check and a best-effort in-memory request cap; production needs authentication and durable rate limiting.
 - Health advice links to HealthHub Singapore, Health Promotion Board and SportSG sources. The app does not diagnose, prescribe, change medication, or override a clinician.
 - Sponsored placements are static demo cards and do not inspect conditions, heart rate or other sensitive health data.
 
@@ -67,4 +69,4 @@ Approved plan items can be exported as an `.ics` calendar file. The Google Calen
 
 ## Production migration path
 
-The prototype stores one local profile in `localStorage` and does not provide real authentication. A production version should use Expo/React Native for the mobile client, a server API (FastAPI or Node), Supabase Auth and PostgreSQL with per-user row-level security (see `schema.sql`), a server-side LLM gateway, provider-specific tracker adapters, and Google OAuth. Keep API keys, OAuth client secrets, provider refresh tokens and health data out of public source files and client bundles. Store secrets in the deployment secret manager. Only one person's health context may be used in any account request.
+The prototype stores one local profile in `localStorage` and does not provide real authentication. A production version should use Expo/React Native for the mobile client, Supabase Auth and PostgreSQL with per-user row-level security (see `schema.sql`), durable API rate limits, provider-specific tracker adapters, and Google OAuth. Keep API keys, OAuth client secrets, provider refresh tokens and health data out of public source files and client bundles. Store secrets in the deployment secret manager. Only one person's health context may be used in any account request.

@@ -10,3 +10,19 @@
 @media(max-width:1050px){.context-strip{grid-template-columns:1fr 1fr}.timetable-grid,.coach-layout{grid-template-columns:1fr}.timetable-edit-row{grid-template-columns:62px 78px 78px 1fr 1fr 24px}}
 @media(max-width:800px){.banner-actions{margin-left:0}.setup-banner{flex-wrap:wrap}.context-strip{margin-top:15px}.four-day-grid{grid-template-columns:1fr}.mobile-nav button{min-width:0;flex:1}}
 @media(max-width:540px){.banner-actions{width:100%;margin-left:0}.banner-actions .light-button{flex:1;padding:8px;font-size:10px}.context-strip{grid-template-columns:1fr 1fr;padding:13px}.context-strip>div:first-child{grid-column:1/-1}.context-strip button{font-size:10px}.home-extra,.settings-grid{grid-template-columns:1fr}.timetable-edit-row{grid-template-columns:56px 1fr 1fr 22px}.timetable-edit-row input[data-field=title],.timetable-edit-row input[data-field=location]{grid-column:2/4}.timetable-edit-row button{grid-column:4;grid-row:1/4}.goal-list{grid-template-columns:1fr}.chat-card{min-height:450px}.chat-messages{max-height:340px}.trend-notes{display:block}.trend-notes small{display:block;text-align:left;margin-top:5px}}
+/* Live model controls follow the existing Pace card system. */
+.ai-home-card,.ai-insight-card,.ai-settings{padding:1.5rem}
+.ai-home-card{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;margin:1.25rem 0;background:#eef7ff;border:1px solid #cfe4f7}
+.ai-home-card h2,.ai-insight-card h2,.ai-settings h2{margin:.35rem 0 .5rem;font-size:1.3rem}
+.ai-home-card p,.ai-insight-card p,.ai-settings p{margin:.25rem 0 .65rem;line-height:1.55}
+.ai-home-card small{display:block;color:#4a6175;margin-top:.4rem}
+.ai-kicker{font-size:.72rem;letter-spacing:.12em;font-weight:800;color:#1660a0}
+.ai-home-card .primary-button{flex:none}
+.ai-insight-card{margin-bottom:1.5rem}
+.ai-insight-card .section-heading{align-items:center}
+.ai-summary{font-size:1.03rem;font-weight:600}
+.ai-forecast-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem;margin:1rem 0}
+.ai-forecast-grid>div{padding:.8rem;border-radius:12px;background:#f4f8fb;display:grid;gap:.25rem}
+.ai-forecast-grid strong{font-size:.85rem}.ai-forecast-grid span{font-weight:700}.ai-forecast-grid small,.ai-insight-card>small{color:#647789}
+.ai-settings{margin-top:1rem}
+@media(max-width:650px){.ai-home-card{display:block}.ai-home-card .primary-button{margin-top:1rem;width:100%}.ai-insight-card .section-heading{display:block}.ai-insight-card .section-heading .primary-button{margin-top:.8rem;width:100%}}

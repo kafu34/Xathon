@@ -28,7 +28,7 @@ function loadAlexDemo() {
   persist();closeModal();renderDashboard();showView('dashboard');toast('Alex demo loaded. All measurements are sample data.');
 }
 function renderWelcome() {
-  $('#modal-content').innerHTML=`<p class="modal-kicker">PACE · SINGAPORE STUDENT DEMO</p><h2 id="modal-title">Health advice that fits your actual student life.</h2><p class="modal-intro">Your tracker can tell you what happened. Pace also looks at classes, exams and routines to suggest what fits next.</p><div class="welcome-choices"><button class="welcome-choice" id="welcome-own"><strong>Set up my own profile</strong><small>Enter your goals and timetable in a local demo session.</small><svg><use href="#i-arrow"/></svg></button><button class="welcome-choice" id="welcome-demo"><strong>Try Alex's sample day</strong><small>Explore a university student scenario with clearly labeled sample data.</small><svg><use href="#i-arrow"/></svg></button></div><div class="notice">No account is created. This prototype stores data only in this browser and does not connect to a medical service.</div><div class="modal-actions"><button class="link-button" id="welcome-explore">Explore sample dashboard</button></div>`;
+  $('#modal-content').innerHTML=`<p class="modal-kicker">PACE · SINGAPORE STUDENT DEMO</p><h2 id="modal-title">Health advice that fits your actual student life.</h2><p class="modal-intro">Your tracker can tell you what happened. Pace also looks at classes, exams and routines to suggest what fits next.</p><div class="welcome-choices"><button class="welcome-choice" id="welcome-own"><strong>Set up my own profile</strong><small>Enter your goals and timetable in a local demo session.</small><svg><use href="#i-arrow"/></svg></button><button class="welcome-choice" id="welcome-demo"><strong>Try Alex's sample day</strong><small>Explore a university student scenario with clearly labeled sample data.</small><svg><use href="#i-arrow"/></svg></button></div><div class="notice">No account is created. Data stays in this browser until you choose to use live AI; that action asks before selected context is sent to the model.</div><div class="modal-actions"><button class="link-button" id="welcome-explore">Explore sample dashboard</button></div>`;
   const seen=()=>sessionStorage.setItem('paceWelcomeSeen','1');
   $('#welcome-own').addEventListener('click',()=>{seen();closeModal();openModal('student-setup');});
   $('#welcome-demo').addEventListener('click',()=>{seen();loadAlexDemo();});
@@ -94,7 +94,7 @@ function exportCalendar() {
 }
 function renderCoachChat() {
   const list=state.chat.length?state.chat:[{role:'coach',text:'Hi! I’ll work around your fixed classes, exams and shifts. Ask why I chose a time, tell me what changed, or request an exam recovery plan.'}];
-  $('#chat-messages').innerHTML=list.slice(-25).map(m=>`<div class="chat-bubble ${m.role}"><span>${m.role==='coach'?'Pace Coach':'You'}</span><p>${clean(m.text)}</p>${m.evidence?`<button data-evidence="${m.evidence}">View evidence</button>`:''}</div>`).join('');
+  $('#chat-messages').innerHTML=list.slice(-25).map(m=>`<div class="chat-bubble ${m.role}"><span>${m.role==='coach'?(m.model?'Pace AI Coach':'Pace Coach'):'You'}</span><p>${clean(m.text)}</p>${m.evidence?`<button data-evidence="${m.evidence}">View evidence</button>`:''}</div>`).join('');
   $('#chat-messages').scrollTop=$('#chat-messages').scrollHeight;
 }
 function renderStudentSetup() {
@@ -188,7 +188,7 @@ document.addEventListener('click',event=>{
   const skip=event.target.closest('[data-skip]');if(skip){const id=skip.dataset.skip;state.actions=state.actions.filter(a=>a.id!==id);state.actions.push({id,date:id.slice(-10),status:'skipped',source:'user'});persist();renderStudentPanels();toast('No problem. Pace will keep the next suggestion manageable.');return;}
   if(event.target.closest('[data-simulate-sync]')){const item=studentPlan()[0]?.items.find(i=>i.id.startsWith('movement-'));if(item){const mockRecord=S.trackerAdapter.normalize({timestamp:`${dayKey()}T${item.time}:00`,workouts:[{started_at:`${dayKey()}T${item.time}:00`,duration_minutes:item.minutes,type:'walk'}]},'demo tracker');const match=S.learningAgent.detect(studentPlan(),[mockRecord])[0];if(match){state.actions=state.actions.filter(a=>a.id!==match.id);state.actions.push({...match,status:'completed'});if(!state.completed.includes(dayKey()))state.completed.push(dayKey());persist();renderDashboard();toast('Demo tracker activity matched the plan and marked it complete.');}}return;}
   const remove=event.target.closest('[data-remove-row]');if(remove){draftEvents.splice(Number(remove.dataset.removeRow),1);renderTimetableRows();return;}
-  const question=event.target.closest('[data-question]');if(question){showView('coach');handleCoachMessage(question.dataset.question);return;}
+  const question=event.target.closest('[data-question]');if(question){showView('coach');const message=question.dataset.question;if(/class tomorrow changed|(?:move|change).*(?:workout|walk|session).*(?:to|at)\s+\d/i.test(message))handleCoachMessage(message);else if(window.PaceAI)window.PaceAI.coach(message);else handleCoachMessage(message);return;}
 });
 $('#load-demo').addEventListener('click',loadAlexDemo);
 $('#choose-timetable').addEventListener('click',()=>$('#timetable-file').click());
@@ -198,6 +198,6 @@ $('#add-event').addEventListener('click',()=>{draftEvents.push({id:crypto.random
 $('#timetable-rows').addEventListener('input',readDraftRow);
 $('#timetable-rows').addEventListener('change',readDraftRow);
 $('#confirm-timetable').addEventListener('click',()=>{if(!draftEvents.length){toast('Add or extract at least one event.');return;}if(draftEvents.some(e=>!e.title?.trim()||!e.start||!e.end||S.mins(e.end)<=S.mins(e.start))){toast('Review each event’s name and time.');return;}if($('#exam-timetable').checked){if(!state.temporary?.active)state.regularSchedule=[...state.schedule];state.temporary={active:true,label:'Exam period',learning:'pause',started:dayKey()};}state.schedule=draftEvents.map(e=>({...e,title:e.title.trim(),location:e.location?.trim()||'',fixed:true}));draftEvents=[];persist();renderTimetableRows();renderDashboard();toast('Timetable confirmed. Your plan now works around these events.');showView('plan');});
-$('#chat-form').addEventListener('submit',event=>{event.preventDefault();const input=$('#chat-input'),message=input.value;input.value='';handleCoachMessage(message);});
+$('#chat-form').addEventListener('submit',event=>{event.preventDefault();const input=$('#chat-input'),message=input.value;input.value='';if(/(?:class|lecture|lab|tutorial).*tomorrow.*from|(?:move|change).*(?:workout|walk|session).*(?:to|at)\s+\d/i.test(message))handleCoachMessage(message);else if(window.PaceAI)window.PaceAI.coach(message);else handleCoachMessage(message);});
 renderDashboard();
 if(!state.profile&&!sessionStorage.getItem('paceWelcomeSeen'))openModal('welcome');
