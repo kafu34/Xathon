@@ -73,7 +73,7 @@ function renderDashboard() {
   setText('greeting',`${greeting}${p.name ? `, ${p.name.split(' ')[0]}` : ''}. Let's find your pace.`);
   setText('heading-sub',state.profile ? `A plan shaped by your ${p.goal.toLowerCase()} goal and today’s signals.` : 'A plan that moves with your energy, not against it.');
   $('#setup-banner').hidden=!!state.profile;
-  $('#demo-pill').hidden=!!state.profile;
+  $('#demo-pill').hidden=!!state.profile && !state.demo;
   setText('side-name',p.name || 'Your space'); setText('side-subtitle',state.profile ? p.goal : 'Set up your profile');
   for (const id of ['avatar','top-avatar','profile-avatar']) setText(id,(p.name || 'P').trim().charAt(0).toUpperCase());
   $('#score-ring').style.setProperty('--score',score ?? 0); setText('score-number',score === null ? '—' : score);
@@ -93,6 +93,7 @@ function renderDashboard() {
   setText('coach-title',rec.coachTitle); setText('coach-message',rec.coach);
   renderChart('weekly-chart',list); renderChart('insights-chart',list);
   renderInsights(list); renderPlan(rec,score); renderProfile(p);
+  if(typeof window.renderStudentPanels==='function') window.renderStudentPanels();
 }
 function renderInsights(list) {
   const count=state.profile ? list.length : 0;
@@ -146,6 +147,12 @@ function openModal(type) {
   if (type==='setup') { setupStep=1; draftProfile={...profile(),days:[...(profile().days||[])]}; renderSetup(); }
   if (type==='checkin') renderCheckin();
   if (type==='device') renderDevice();
+  if (type==='student-setup') { studentDraft=null; renderStudentSetup(); }
+  if (type==='welcome') renderWelcome();
+  if (type==='student-device') renderStudentDevice();
+  if (type==='evidence') renderEvidence();
+  if (type==='temporary') renderTemporaryMode();
+  if (type==='recovery') renderRecoveryPlan();
   $('#modal-backdrop').hidden=false;
   document.body.style.overflow='hidden';
   $('#modal-close').focus();
@@ -167,12 +174,13 @@ function renderCheckin() {
   const existing=state.entries.find(entry=>entry.date===dayKey()) || {};
   $('#modal-content').innerHTML=`<p class="modal-kicker">DAILY CHECK-IN</p><h2 id="modal-title">How are you feeling today?</h2><p class="modal-intro">A few honest numbers make your plan more useful. You can update this later.</p><form id="checkin-form"><div class="form-grid"><div class="field"><label for="checkin-sleep">Sleep last night (hours)</label><input id="checkin-sleep" type="number" name="sleep" min="0" max="12" step="0.1" required value="${existing.sleep??''}" placeholder="e.g. 7.5" /></div><div class="field"><label for="checkin-hr">Resting heart rate (bpm)</label><input id="checkin-hr" type="number" name="hr" min="35" max="120" value="${existing.hr??''}" placeholder="Optional" /></div><div class="field"><label for="checkin-energy">Energy today</label><select id="checkin-energy" name="energy">${['Very low','Low','Okay','Good','High'].map((label,i)=>`<option value="${i+1}" ${Number(existing.energy??3)===i+1?'selected':''}>${label}</option>`).join('')}</select></div><div class="field"><label for="checkin-stress">Stress today</label><select id="checkin-stress" name="stress">${['Very low','Low','Moderate','High','Very high'].map((label,i)=>`<option value="${i+1}" ${Number(existing.stress??3)===i+1?'selected':''}>${label}</option>`).join('')}</select></div><div class="field"><label for="checkin-activity">Activity so far (minutes)</label><input id="checkin-activity" type="number" name="activity" min="0" max="600" value="${existing.activity??0}" /></div></div><div class="modal-actions"><button type="button" class="link-button" id="checkin-cancel">Cancel</button><button class="primary-button" type="submit">Save check-in <svg><use href="#i-check"/></svg></button></div></form>`;
   $('#checkin-form .form-grid').insertAdjacentHTML('beforeend',`<div class="field"><label for="checkin-workout">Workout today</label><select id="checkin-workout" name="workout">${['None','Walk','Strength','Cardio','Sport','Mobility'].map(label=>`<option ${existing.workout===label?'selected':''}>${label}</option>`).join('')}</select></div>`);
+  $('#checkin-form .form-grid').insertAdjacentHTML('beforeend',`<div class="field"><label for="checkin-steps">Steps, if known</label><input id="checkin-steps" type="number" name="steps" min="0" max="100000" value="${existing.steps??''}" placeholder="Optional" /></div><div class="field"><label for="checkin-feeling">How are you feeling?</label><select id="checkin-feeling" name="feeling">${['Great','Good','Tired','Stressed','Unwell'].map(label=>`<option ${existing.feeling===label?'selected':''}>${label}</option>`).join('')}</select></div><div class="field full"><label for="checkin-note">Anything else today?</label><input id="checkin-note" name="note" maxlength="160" value="${escapeHTML(existing.note||'')}" placeholder="Optional note" /></div>`);
   $('#checkin-cancel').addEventListener('click',closeModal);
   $('#checkin-form').addEventListener('submit',event=>{
     event.preventDefault();
     if (!state.profile) { toast('Set up your profile first to save check-ins.'); closeModal(); openModal('setup'); return; }
     const form=new FormData(event.currentTarget);
-    const item={date:dayKey(),sleep:clamp(form.get('sleep'),0,12),energy:clamp(form.get('energy'),1,5),stress:clamp(form.get('stress'),1,5),activity:clamp(form.get('activity'),0,600),hr:form.get('hr')?clamp(form.get('hr'),35,120):null,workout:form.get('workout')};
+    const item={date:dayKey(),sleep:clamp(form.get('sleep'),0,12),energy:clamp(form.get('energy'),1,5),stress:clamp(form.get('stress'),1,5),activity:clamp(form.get('activity'),0,600),hr:form.get('hr')?clamp(form.get('hr'),35,120):null,workout:form.get('workout'),steps:form.get('steps')?clamp(form.get('steps'),0,100000):null,feeling:form.get('feeling'),note:String(form.get('note')||'').trim(),temporary:state.temporary?.active ? state.temporary.label : null};
     state.entries=state.entries.filter(entry=>entry.date!==item.date);state.entries.push(item);persist();closeModal();renderDashboard();toast('Check-in saved. Your plan has been updated.');
   });
 }
@@ -184,16 +192,16 @@ document.addEventListener('click',event=>{const open=event.target.closest('[data
 $('#modal-close').addEventListener('click',closeModal);
 $('#modal-backdrop').addEventListener('click',event=>{if(event.target===event.currentTarget)closeModal();});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('#modal-backdrop').hidden)closeModal();});
-$('#complete-plan').addEventListener('click',()=>{if(!state.profile){openModal('setup');return;}state.completed.push(dayKey());persist();renderDashboard();toast('Nice work. Today’s plan is marked done.');});
-$('#reset-data').addEventListener('click',()=>{if(!state.profile)return;if(!window.confirm('Clear your local Pace profile and all check-ins from this browser?'))return;state.profile=null;state.entries=[];state.completed=[];persist();renderDashboard();showView('dashboard');toast('Local data cleared.');});
+$('#complete-plan').addEventListener('click',()=>{if(!state.profile){openModal('student-setup');return;}const item=typeof window.studentPlan==='function'?window.studentPlan()[0]?.items.find(i=>i.kind==='suggestion'):null;if(item){state.actions||=[];if(!state.actions.some(a=>a.id===item.id))state.actions.push({id:item.id,date:dayKey(),status:'completed',minutes:item.minutes,source:'user'});}if(!state.completed.includes(dayKey()))state.completed.push(dayKey());persist();renderDashboard();toast('Nice work. Today’s plan is marked done.');});
+$('#reset-data').addEventListener('click',()=>{if(!state.profile)return;if(!window.confirm('Clear your local Pace profile and all check-ins from this browser?'))return;state.profile=null;state.entries=[];state.completed=[];state.schedule=[];state.actions=[];state.weightEntries=[];state.temporary=null;state.demo=false;persist();renderDashboard();showView('dashboard');toast('Local data cleared.');});
 renderDashboard();
 const initialView=location.hash.replace('#','');
-if(['dashboard','insights','plan','profile'].includes(initialView))showView(initialView);
+if(['dashboard','insights','plan','timetable','coach','profile'].includes(initialView))showView(initialView);
 
 // Expose the same daily journey as structured browser tools where WebMCP is supported.
 if (document.modelContext?.registerTool) {
   const register = (tool) => { try { Promise.resolve(document.modelContext.registerTool(tool)).catch(()=>{}); } catch {} };
-  register({name:'read_today_plan',title:'Read today’s Pace plan',description:'Read the current readiness estimate and suggested activity shown in Pace.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute(){const score=scoreOf(latestEntry());const plan=recommendation(score);return {date:dayKey(),sampleData:!state.profile,readiness:score,title:plan.title,duration:plan.duration,intensity:plan.intensity,window:timing()};}});
-  register({name:'start_profile_setup',title:'Start Pace profile setup',description:'Open the profile and timetable form so the user can enter their information.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:false},execute(){openModal('setup');return {status:'form_open'};}});
+  register({name:'read_today_plan',title:'Read today’s Pace plan',description:'Read the same timetable-aware suggestion shown in Pace.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute(){const score=scoreOf(latestEntry());const day=window.studentPlan?.()[0];const item=day?.items.find(entry=>entry.id.startsWith('movement-'));return {date:dayKey(),sampleData:!state.profile||!!state.demo,readiness:score,title:item?.title||'No open movement window',duration:item?.minutes??null,intensity:item?.minutes<=10?'Gentle or rest':'Easy to moderate',window:item?.time??null,fixedCommitments:day?.items.filter(entry=>entry.kind==='fixed').map(entry=>({title:entry.title,start:entry.time,end:entry.end}))||[]};}});
+  register({name:'start_profile_setup',title:'Start Pace profile setup',description:'Open the student profile and goal form.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:false},execute(){openModal('student-setup');return {status:'form_open'};}});
   register({name:'save_today_checkin',title:'Save today’s check-in',description:'Save sleep, energy, stress, heart rate and activity for today, then update the visible plan. Requires a saved profile.',inputSchema:{type:'object',properties:{sleep:{type:'number',minimum:0,maximum:12},energy:{type:'integer',minimum:1,maximum:5},stress:{type:'integer',minimum:1,maximum:5},activity:{type:'integer',minimum:0,maximum:600},hr:{type:['integer','null'],minimum:35,maximum:120},workout:{type:'string',enum:['None','Walk','Strength','Cardio','Sport','Mobility']}},required:['sleep','energy','stress','activity'],additionalProperties:false},annotations:{readOnlyHint:false},execute(input){if(!state.profile)throw new Error('Complete profile setup before saving a check-in.');if(!input||!Number.isFinite(input.sleep)||input.sleep<0||input.sleep>12||!Number.isInteger(input.energy)||input.energy<1||input.energy>5||!Number.isInteger(input.stress)||input.stress<1||input.stress>5||!Number.isInteger(input.activity)||input.activity<0||input.activity>600||(input.hr!=null&&(!Number.isInteger(input.hr)||input.hr<35||input.hr>120)))throw new Error('Invalid check-in values.');const workout=input.workout||'None';if(!['None','Walk','Strength','Cardio','Sport','Mobility'].includes(workout))throw new Error('Invalid workout.');const item={date:dayKey(),sleep:input.sleep,energy:input.energy,stress:input.stress,activity:input.activity,hr:input.hr??null,workout};state.entries=state.entries.filter(entry=>entry.date!==item.date);state.entries.push(item);persist();renderDashboard();return {status:'saved',date:item.date,readiness:scoreOf(item)};}});
 }
