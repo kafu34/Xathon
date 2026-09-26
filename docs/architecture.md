@@ -1,6 +1,6 @@
 # Pace architecture
 
-Pace is a mobile-first website for a Singapore polytechnic or university hackathon demo. Its core decision is to keep fixed timetable events fixed and place small health suggestions in the gaps. The browser keeps the user's profile and history locally; an opt-in Cloudflare Worker calls the OpenAI Responses API for model analysis and chat. `dist/services.js` contains timetable-safe planning modules, `dist/student.js` contains student flows, `dist/ai.js` handles opt-in AI UI, and `worker/index.js` implements the model gateway. `scripts/build-worker.mjs` bundles the UI and Worker into `dist/server/index.js` for Sites.
+Pace is a mobile-first website for a Singapore polytechnic or university hackathon demo. Its core decision is to keep fixed timetable events fixed and place small health suggestions in the gaps. The browser keeps the user's profile and history locally; an opt-in Cloudflare Worker calls GroqCloud's chat completions API for model analysis and chat. `dist/services.js` contains timetable-safe planning modules, `dist/student.js` contains student flows, `dist/ai.js` handles opt-in AI UI, and `worker/index.js` implements the model gateway. `scripts/build-worker.mjs` bundles the UI and Worker into `dist/server/index.js` for Sites.
 
 ## Current flow
 
@@ -17,7 +17,7 @@ Student profile + ranked goals + confirmed timetable + normalized health entries
   ↺ Pattern Agent
 ```
 
-These are software modules, not six separate large language models. One general LLM explains forecasts and replies to chat; structured personal data and the validated planner remain separate. The Worker accepts only selected fields, computes descriptive three-day ranges when at least four observations span three days, and asks the LLM to interpret those ranges. It uses a strict JSON schema, `store: false`, capped output, a server-held key, and a fixed source list. It rejects model-selected plan items that overlap fixed commitments and replaces unsafe medical or timetable-changing claims. No clinical accuracy or disease-risk prediction is claimed. The model is unavailable until the Site secret `OPENAI_API_KEY` is configured.
+These are software modules, not six separate large language models. One general LLM explains forecasts and replies to chat; structured personal data and the validated planner remain separate. The Worker accepts only selected fields, computes descriptive three-day ranges when at least four observations span three days, and asks the LLM to interpret those ranges. It uses GroqCloud strict JSON schema mode, capped output, a server-held key, and a fixed source list. It rejects model-selected plan items that overlap fixed commitments and replaces unsafe medical or timetable-changing claims. No clinical accuracy or disease-risk prediction is claimed. The model is unavailable until the Site secret `GROQ_API_KEY` is configured.
 
 ## Normalized tracker record
 
@@ -59,7 +59,7 @@ OCR on grid screenshots may be imperfect; the review step is mandatory. The uplo
 - The planner covers today and the next three days, uses lower effort when sleep/stress or temporary context warrants it, and offers general rest guidance when an injury or condition is reported.
 - Temporary periods are labelled. The student may pause baseline learning or build a separate temporary baseline; ending a period restores the regular baseline.
 - Personal pattern text is labelled as an observation, not causation. The readiness number is a demo heuristic, not a disease-risk score.
-- The student must opt in before selected health and timetable context is sent to the Worker and OpenAI. Name, school, height and weight are excluded from model requests. The Worker keeps no account history. The public hackathon endpoint has input bounds, a same-origin check and a best-effort in-memory request cap; production needs authentication and durable rate limiting.
+- The student must opt in before selected health and timetable context is sent to the Worker and GroqCloud. Switching providers invalidates prior consent. Name, school, height and weight are excluded from model requests. The Worker keeps no account history. GroqCloud's data controls are linked in the consent screen. The public hackathon endpoint has input bounds, a same-origin check and a best-effort in-memory request cap; production needs authentication and durable rate limiting.
 - Health advice links to HealthHub Singapore, Health Promotion Board and SportSG sources. The app does not diagnose, prescribe, change medication, or override a clinician.
 - Sponsored placements are static demo cards and do not inspect conditions, heart rate or other sensitive health data.
 

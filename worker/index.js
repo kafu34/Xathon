@@ -49,11 +49,11 @@ function safeText(value,max) {
 async function askModel(env,kind,payload) {
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),25000);
   try {
-    const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:controller.signal,headers:{authorization:`Bearer ${env.OPENAI_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({model:env.OPENAI_MODEL||'gpt-6-luna',store:false,max_output_tokens:1000,instructions:RULES+(kind==='analysis'?' Choose one recommended_item_id from supplied suggestion IDs only. Mention that forecast ranges are exploratory, not clinically validated.':' Reply to the last student message. Do not claim you changed a timetable, goal, or reminder; those actions require app confirmation.'),input:JSON.stringify(payload),text:{format:{type:'json_schema',name:kind==='analysis'?'pace_analysis':'pace_coach',strict:true,schema:kind==='analysis'?ANALYSIS_SCHEMA:COACH_SCHEMA}}})});
-    if(!response.ok)throw new Error(`model_${response.status}`);
-    const data=await response.json();if(data.status!=='completed')throw new Error('model_incomplete');
-    const output=(data.output||[]).flatMap(item=>item.content||[]).filter(item=>item.type==='output_text').map(item=>item.text).join('');
-    return JSON.parse(output);
+    const instructions=RULES+(kind==='analysis'?' Choose one recommended_item_id from supplied suggestion IDs only. Mention that forecast ranges are exploratory, not clinically validated.':' Reply to the last student message. Do not claim you changed a timetable, goal, or reminder; those actions require app confirmation.');
+    const response=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',signal:controller.signal,headers:{authorization:`Bearer ${env.GROQ_API_KEY}`,'content-type':'application/json'},body:JSON.stringify({model:env.GROQ_MODEL||'openai/gpt-oss-120b',max_completion_tokens:1200,reasoning_effort:'low',messages:[{role:'system',content:instructions},{role:'user',content:JSON.stringify(payload)}],response_format:{type:'json_schema',json_schema:{name:kind==='analysis'?'pace_analysis':'pace_coach',strict:true,schema:kind==='analysis'?ANALYSIS_SCHEMA:COACH_SCHEMA}}})});
+    if(!response.ok)throw new Error(response.status===429?'provider_rate_limited':`model_${response.status}`);
+    const data=await response.json();if(data.choices?.[0]?.finish_reason==='length')throw new Error('model_incomplete');
+    return JSON.parse(data.choices?.[0]?.message?.content||'');
   } finally {clearTimeout(timer);}
 }
 function rateLimited(request) {
@@ -66,7 +66,7 @@ async function api(request,env,kind) {
   if(!request.headers.get('content-type')?.startsWith('application/json'))return json({error:'json_required'},415);
   if(Number(request.headers.get('content-length')||0)>30000)return json({error:'request_too_large'},413);
   if(rateLimited(request))return json({error:'rate_limited'},429);
-  if(!env.OPENAI_API_KEY)return json({error:'ai_not_configured'},503);
+  if(!env.GROQ_API_KEY)return json({error:'ai_not_configured'},503);
   let raw;try{const body=await request.text();if(body.length>30000)return json({error:'request_too_large'},413);raw=JSON.parse(body);}catch{return json({error:'invalid_json'},400);}
   if(!raw || typeof raw!=='object' || Array.isArray(raw))return json({error:'invalid_input'},400);
   const context=contextOf(raw),history=(Array.isArray(raw.history)?raw.history:[]).slice(-6).map(m=>({role:m.role==='coach'?'coach':'student',text:cut(m.text,500)}));
@@ -83,12 +83,12 @@ async function api(request,env,kind) {
     const allNighter=/all.?night|stay up all night|pull an all/i.test(message),medical=/(?:medicat|prescrip|dosage|fracture|acl|surgery|rehab|diagnos|hypertension|diabetes)/i.test(message);
     const reply=medical?'I can help with a general routine, but treatment, medication and rehabilitation decisions belong with your doctor or physiotherapist. I can keep optional activity light and work around your fixed commitments.':safeText(output.reply,750)||'I can help you find a manageable step around your fixed timetable. What changed today?';
     return json({mode:'model',reply,action:allNighter||/recover/i.test(message)&&output.action==='recovery'?'recovery':'none',evidenceKey:EVIDENCE[output.evidence_key]?output.evidence_key:null,sampleData:context.demo});
-  } catch {return json({error:'model_unavailable'},502);}
+  } catch(error) {return error.message==='provider_rate_limited'?json({error:'rate_limited'},429):json({error:'model_unavailable'},502);}
 }
 export default {
   async fetch(request,env) {
     const url=new URL(request.url),path=url.pathname;
-    if(path==='/api/ai/status'&&request.method==='GET')return json({available:!!env.OPENAI_API_KEY,model:env.OPENAI_API_KEY?'OpenAI model':'unavailable'});
+    if(path==='/api/ai/status'&&request.method==='GET')return json({available:!!env.GROQ_API_KEY,model:env.GROQ_API_KEY?'Groq model':'unavailable'});
     if(path==='/api/ai/analysis'||path==='/api/ai/coach')return request.method==='POST'?api(request,env,path.endsWith('analysis')?'analysis':'coach'):json({error:'method_not_allowed'},405);
     if(request.method!=='GET'&&request.method!=='HEAD')return new Response('Method not allowed',{status:405});
     const assetPath=path==='/'?'/index.html':path;

@@ -14,7 +14,7 @@ http.createServer(async (incoming, outgoing) => {
       headers:incoming.headers,
       body:['GET','HEAD'].includes(incoming.method)?undefined:body
     });
-    const response=await (await worker).default.fetch(request,{OPENAI_API_KEY:process.env.OPENAI_API_KEY||'',OPENAI_MODEL:process.env.OPENAI_MODEL||''});
+    const response=await (await worker).default.fetch(request,{GROQ_API_KEY:process.env.GROQ_API_KEY||'',GROQ_MODEL:process.env.GROQ_MODEL||''});
     outgoing.writeHead(response.status,Object.fromEntries(response.headers));
     outgoing.end(Buffer.from(await response.arrayBuffer()));
   } catch {

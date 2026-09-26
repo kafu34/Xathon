@@ -1,20 +1,20 @@
 /* Live AI is opt-in. Only a small, selected context is sent to the server. */
 (() => {
-  state.aiConsent ||= false;
+  state.aiConsent = state.aiConsent === true && state.aiConsentProvider === 'groq';
   state.aiAnalysis ||= null;
   const insightNode=document.createElement('div');insightNode.id='ai-insights';$('#student-trends').before(insightNode);
   const coachStatus=$('#view-coach .chat-header small');
   $('#view-coach .chat-header strong').textContent='Pace AI Coach';
   $('#view-coach .page-heading .heading-sub').textContent='Live model explanations grounded in your timetable, signals and evidence.';
   $('.privacy-note strong').textContent='Your data, with your choice';
-  $('.privacy-note p').textContent='Entries are stored in this browser. When you opt in to live AI, selected context is sent to our server and OpenAI for that request. No account or wearable connection is active.';
+  $('.privacy-note p').textContent='Entries are stored in this browser. When you opt in to live AI, selected context is sent to our server and GroqCloud for that request. No account or wearable connection is active.';
   let availability=null,working=false;
   const currentContext=()=>({
     profile:{age:state.profile?.age??null,goals:state.profile?.goals||[state.profile?.goal].filter(Boolean),bedtime:state.profile?.bedtime||'',lifestyle:state.profile?.lifestyle||'',conditions:state.profile?.conditions||'',injuries:state.profile?.injuries||''},
     entries:(state.profile?state.entries:sampleEntries).slice(-21).map(({date,sleep,steps,activity,stress,hr,energy,temporary})=>({date,sleep,steps,activity,stress,hr,energy,temporary})),
     plan:studentPlan(),temporary:state.temporary,actions:state.actions.slice(-20),demo:!!state.demo||!state.profile
   });
-  const fingerprint=()=>JSON.stringify(currentContext());
+  const fingerprint=()=>JSON.stringify({provider:'groq',context:currentContext()});
   async function status() {
     try {const response=await fetch('/api/ai/status',{cache:'no-store'});const data=await response.json();availability=response.ok&&!!data.available;}
     catch {availability=false;}
@@ -25,9 +25,9 @@
     if(state.aiConsent)return Promise.resolve(true);
     return new Promise(resolve=>{
       let settled=false;
-      const finish=value=>{if(settled)return;settled=true;observer.disconnect();if(value){state.aiConsent=true;persist();}closeModal();render();resolve(value);};
+      const finish=value=>{if(settled)return;settled=true;observer.disconnect();if(value){state.aiConsent=true;state.aiConsentProvider='groq';persist();}closeModal();render();resolve(value);};
       lastFocus=document.activeElement;
-      $('#modal-content').innerHTML='<p class="modal-kicker">LIVE AI · YOUR CHOICE</p><h2 id="modal-title">Share selected data with Pace AI?</h2><p class="modal-intro">To answer, Pace sends your recent sleep, activity, stress and heart-rate entries, goals, optional lifestyle or health context, fixed timetable, plan follow-through, and recent chat messages to our server and the OpenAI API. Your profile name, school and weight are excluded. Nothing is sent until you continue.</p><div class="notice">The model can make mistakes. Its trend forecast is exploratory and its advice is general, not a diagnosis. You can turn off live AI in Settings.</div><div class="modal-actions"><button class="link-button" id="ai-consent-cancel">Not now</button><button class="primary-button" id="ai-consent-allow">Continue with AI</button></div>';
+      $('#modal-content').innerHTML='<p class="modal-kicker">LIVE AI · YOUR CHOICE</p><h2 id="modal-title">Share selected data with GroqCloud?</h2><p class="modal-intro">To answer, Pace sends your recent sleep, activity, stress and heart-rate entries, goals, optional lifestyle or health context, fixed timetable, plan follow-through, and recent chat messages to our server and GroqCloud. Your profile name, school and weight are excluded. Nothing is sent until you continue.</p><div class="notice">GroqCloud may temporarily log requests for reliability or abuse review. <a href="https://console.groq.com/docs/your-data" target="_blank" rel="noopener noreferrer">Read Groq’s data controls</a>. The model can make mistakes; advice is general, not a diagnosis. You can turn off sharing in Settings.</div><div class="modal-actions"><button class="link-button" id="ai-consent-cancel">Not now</button><button class="primary-button" id="ai-consent-allow">Continue with AI</button></div>';
       $('#modal-backdrop').hidden=false;document.body.style.overflow='hidden';$('#ai-consent-allow').focus();
       const observer=new MutationObserver(()=>{if($('#modal-backdrop').hidden)finish(false);});observer.observe($('#modal-backdrop'),{attributes:true,attributeFilter:['hidden']});
       $('#ai-consent-allow').addEventListener('click',()=>finish(true));$('#ai-consent-cancel').addEventListener('click',()=>finish(false));
@@ -82,6 +82,6 @@
   const settings=$('#student-settings');
   const oldSettings=window.renderStudentPanels;
   // Settings is recreated on each dashboard render, so attach a small control afterward.
-  window.renderStudentPanels=()=>{oldSettings();if(!$('#ai-privacy-settings'))settings.insertAdjacentHTML('beforeend',`<article class="surface ai-settings" id="ai-privacy-settings"><h2>Live AI data sharing</h2><p>${state.aiConsent?'You allowed selected context to be sent when you use AI.':'AI will ask before sending your selected context.'} Name, school and weight are excluded.</p><button class="outline-button" id="ai-consent-toggle">${state.aiConsent?'Turn off live AI sharing':'Review AI sharing'}</button></article>`);$('#ai-consent-toggle').addEventListener('click',()=>{if(state.aiConsent){state.aiConsent=false;persist();renderDashboard();toast('Live AI sharing turned off.');}else consent();});};
+  window.renderStudentPanels=()=>{oldSettings();if(!$('#ai-privacy-settings'))settings.insertAdjacentHTML('beforeend',`<article class="surface ai-settings" id="ai-privacy-settings"><h2>GroqCloud data sharing</h2><p>${state.aiConsent?'You allowed selected context to be sent to GroqCloud when you use AI.':'AI will ask before sending your selected context to GroqCloud.'} Name, school and weight are excluded.</p><button class="outline-button" id="ai-consent-toggle">${state.aiConsent?'Turn off live AI sharing':'Review AI sharing'}</button></article>`);$('#ai-consent-toggle').addEventListener('click',()=>{if(state.aiConsent){state.aiConsent=false;state.aiConsentProvider=null;persist();renderDashboard();toast('Live AI sharing turned off.');}else consent();});};
   status();render();
 })();
