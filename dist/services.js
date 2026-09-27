@@ -44,43 +44,62 @@
   const profileAgent = { context(profile,temporary) { return {goals:profile.goals||[profile.goal].filter(Boolean),routine:profile.routine,conditions:profile.conditions||'',injuries:profile.injuries||'',temporary}; } };
   const healthAgent = {
     analyse(rows) {
-      const recent=(rows||[]).slice(-7), measured=recent.filter(r=>r.sleep!=null), avg=(field)=>{const valid=recent.map(r=>r[field]).filter(v=>v!==null&&v!==undefined&&v!=='').map(Number).filter(Number.isFinite);return valid.length?valid.reduce((a,b)=>a+b,0)/valid.length:null;};
+      const recent=[...(rows||[])].sort((a,b)=>a.date.localeCompare(b.date)).slice(-7), measured=recent.filter(r=>r.sleep!=null), avg=(field)=>{const valid=recent.map(r=>r[field]).filter(v=>v!==null&&v!==undefined&&v!=='').map(Number).filter(Number.isFinite);return valid.length?valid.reduce((a,b)=>a+b,0)/valid.length:null;};
       return {days:recent.length,shortNights:measured.filter(r=>r.sleep<7).length,averageSleep:avg('sleep'),averageSteps:avg('steps'),averageStress:avg('stress'),latest:recent.at(-1)||null};
     }
   };
   const patternAgent = {
     find(rows,temporary) {
-      const baseline=(rows||[]).filter(r=>temporary?.active&&temporary.learning==='temporary-baseline' ? r.temporary===temporary.label&&(!temporary.started||r.date>=temporary.started) : !r.temporary);
+      const baseline=window.PaceServices.dataService.baseline(rows,temporary);
       if(baseline.length<3) return {title:'Your personal baseline is forming',detail:`${baseline.length} of 3 check-ins collected. Temporary periods are kept separate.`,count:baseline.length};
       const recent=baseline.slice(-14), enough=recent.filter(r=>r.sleep!=null);
       if(!enough.length)return {title:'Add sleep to a check-in',detail:'Your check-ins do not yet include sleep measurements.',count:baseline.length};
       const short=enough.filter(r=>r.sleep<7).length;
-      return {title:short>=Math.ceil(enough.length/2)?'Sleep has been tight lately':'Your recent sleep is steadier',detail:`${short} of your last ${enough.length} logged nights were below seven hours. Personal observation — association, not proof of causation.`,count:baseline.length};
+      const observations=[`${short} of your last ${enough.length} logged nights were below seven hours.`];
+      const high=recent.filter(r=>r.sleep>=7&&r.energy!=null),low=recent.filter(r=>r.sleep!=null&&r.sleep<7&&r.energy!=null);
+      const avg=(rows,field)=>rows.reduce((sum,r)=>sum+Number(r[field]),0)/rows.length;
+      if(high.length>=2&&low.length>=2){const delta=avg(high,'energy')-avg(low,'energy');observations.push(`Energy averaged ${Math.abs(delta).toFixed(1)} points ${delta>=0?'higher':'lower'} after nights with at least seven hours (${high.length} versus ${low.length} check-ins).`);}
+      for(const [field,label,unit] of [['steps','Steps',''],['hr','Resting heart rate',' bpm'],['stress','Reported stress','/5']]){
+        const measured=recent.filter(r=>r[field]!=null);if(measured.length>=6){const before=avg(measured.slice(-6,-3),field),after=avg(measured.slice(-3),field),delta=after-before;observations.push(`${label}: ${before.toFixed(field==='steps'?0:1)}${unit} across the previous three entries → ${after.toFixed(field==='steps'?0:1)}${unit} across the latest three.`);}
+      }
+      return {title:short>=Math.ceil(enough.length/2)?'Sleep has been tight lately':'Your recent sleep is steadier',detail:observations.join(' ')+' Personal observations; these do not establish a cause or diagnosis.',count:baseline.length};
     }
   };
   const plannerAgent = {
+    fixed(profile,schedule,date){const fixed=timetableService.eventsOn(schedule,date);if(!schedule.length&&profile.days?.includes(days[date.getDay()])&&mins(profile.end)>mins(profile.start))fixed.push({id:'routine-'+key(date),start:profile.start,end:profile.end,title:profile.routine||'Usual routine',location:'From your profile'});return fixed;},
     build(profile,schedule,rows,temporary,preferences,baseDate=new Date()) {
-      const health=healthAgent.analyse(rows), clinicalContext=!!(profile.injuries||profile.conditions),cautious=!!(clinicalContext||temporary?.active||health.latest?.sleep<6||health.latest?.stress>=4);
+      const recentRows=(rows||[]).filter(r=>r.date>=key(addDays(baseDate,-6))&&r.date<=key(baseDate)),health=healthAgent.analyse(recentRows), clinicalContext=!!(profile.injuries||profile.conditions),cautious=!!(clinicalContext||temporary?.active||!health.latest||health.latest.sleep==null||health.latest.date!==key(baseDate)||health.latest.sleep<6||health.latest.stress>=4||(health.latest.energy!=null&&health.latest.energy<=2)||/unwell|tired/i.test(health.latest.feeling||''));
       return Array.from({length:4},(_,offset)=>{
-        const date=addDays(baseDate,offset), fixed=timetableService.eventsOn(schedule,date), busy=fixed.map(e=>({id:e.id,time:e.start,end:e.end,title:e.title,kind:'fixed',location:e.location}));
+        const date=addDays(baseDate,offset), fixed=this.fixed(profile,schedule,date);
+        const busy=fixed.map(e=>({id:e.id,time:e.start,end:e.end,title:e.title,kind:'fixed',location:e.location}));
         const last=fixed.reduce((max,e)=>Math.max(max,mins(e.end)),0);
         const duration=cautious?10:preferences?.preferredDuration?Math.min(30,Math.max(10,preferences.preferredDuration)):offset===0?20:25;
-        const fits=start=>start>=8*60&&start+duration<=22*60&&!fixed.some(e=>start<mins(e.end)&&start+duration>mins(e.start));
+        const wake=mins(profile.wake||'08:00'),bed=mins(profile.bedtime||'23:30'),nowMinutes=offset===0?baseDate.getHours()*60+baseDate.getMinutes():0;
+        const awake=start=>bed>wake?start>=wake&&start+duration<=bed:start>=wake||start+duration<=bed;
+        const fits=start=>start>=Math.max(8*60,nowMinutes)&&start+duration<=22*60&&awake(start)&&!fixed.some(e=>start<mins(e.end)&&start+duration>mins(e.start));
         const preferred=preferences?.workoutTime?mins(preferences.workoutTime):last?last+20:17*60+30;
         const candidates=[preferred,...Array.from({length:169},(_,i)=>8*60+i*5).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred))];
         const start=candidates.find(fits);
         const label=clinicalContext?'Rest break or movement if cleared':cautious?'Gentle movement or rest break':offset===0?'Walk in a free window':'Short movement session';
         const reason=clinicalContext?'Follow your clinician’s activity guidance; fixed commitments stay in place.':fixed.length?`Fits a free window around your ${fixed.length} fixed commitment${fixed.length===1?'':'s'}.`:'Fits a free window in your day.';
         const suggested=start===undefined?null:{id:`movement-${key(date)}`,time:time(start),end:time(start+duration),title:label,kind:'suggestion',minutes:duration,evidence:'movement',reason};
-        const bedtime=mins(profile.bedtime||'23:30'), wind=bedtime-45;
+        const bedtime=mins(profile.bedtime||'23:30'), wind=(bedtime-45+1440)%1440;
         const items=[...busy,...(suggested?[suggested]:[])];
-        if(wind>=0 && wind+15<=24*60 && !fixed.some(e=>wind<mins(e.end)&&wind+15>mins(e.start)) && (!suggested || wind>=start+duration || wind+15<=start)) items.push({id:`wind-${key(date)}`,time:time(wind),end:time(wind+15),title:'Start winding down',kind:'suggestion',minutes:15,evidence:'sleep',reason:'A short routine before your preferred bedtime.'});
+        if(wind>=nowMinutes && wind+15<=24*60 && !fixed.some(e=>wind<mins(e.end)&&wind+15>mins(e.start)) && (!suggested || wind>=start+duration || wind+15<=start)) items.push({id:`wind-${key(date)}`,time:time(wind),end:time(wind+15),title:'Start winding down',kind:'suggestion',minutes:15,evidence:'sleep',reason:'A short routine before your preferred bedtime.'});
+        const goalSource=window.PaceServices.goalService.evidence(profile);
+        if(['stress','nutrition'].includes(goalSource)){
+          const minutes=goalSource==='stress'?5:20,preferred=goalSource==='stress'?16*60:12*60;
+          const starts=Array.from({length:169},(_,i)=>8*60+i*5).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred));
+          const start=starts.find(t=>t>=nowMinutes&&t+minutes<=22*60&&awake(t)&&!items.some(i=>t<mins(i.end)&&t+minutes>mins(i.time)));
+          if(start!==undefined)items.push({id:`${goalSource}-${key(date)}`,time:time(start),end:time(start+minutes),title:goalSource==='stress'?'Take a short relaxation break':'Make time for a balanced meal',kind:'suggestion',minutes,evidence:goalSource,reason:`Supports your ${profile.goals?.[0]||profile.goal} goal in a free window.`,priority:true});
+        }
+        const focus=items.find(i=>i.kind==='suggestion'&&i.evidence===goalSource);if(focus)focus.priority=true;
         items.sort((a,b)=>mins(a.time)-mins(b.time));
         return {date:key(date),day:days[date.getDay()],items,summary:start===undefined?'No open movement window from 08:00 to 22:00. Keep your fixed commitments.':fixed.length?`${fixed.length} fixed commitment${fixed.length>1?'s':''}; suggestions fit around them.`:'A more flexible day for a short reset.'};
       });
     },
     recovery(profile,schedule,baseDate=new Date()) {
-      const next=addDays(baseDate,1),fixed=timetableService.eventsOn(schedule,next);
+      const next=addDays(baseDate,1),fixed=this.fixed(profile,schedule,next);
       const occupied=fixed.map(e=>[mins(e.start),mins(e.end)]),items=[];
       const add=(preferred,duration,title,evidence,earliest=8*60,latest=24*60)=>{
         const candidates=Array.from({length:193},(_,i)=>8*60+i*5).filter(t=>t>=earliest&&t+duration<=latest).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred)||a-b);
@@ -98,7 +117,7 @@
   };
   const coachAgent = {
     reply(input,context) {
-      const q=String(input).toLowerCase(), {plan,profile,health,pattern}=context, first=plan?.[0], movement=first?.items.find(e=>e.kind==='suggestion');
+      const q=String(input).toLowerCase(), {plan,profile,health,pattern}=context, first=plan?.[0], movement=first?.items.find(e=>e.kind==='suggestion'&&e.priority)||first?.items.find(e=>e.kind==='suggestion');
       if(/all.?night|stay up all night|pull an all/.test(q)) return {text:'Understood. I’ll keep your exam or study commitment fixed. An all-nighter can affect sleep and recovery. Would you like a gentler plan for the following day?',action:'recovery',evidence:'sleep'};
       if(/why|reason|explain/.test(q)) return {text:`I suggested ${movement?.title.toLowerCase()||'a short break'} at ${movement?.time||'a free time'} because ${movement?.reason||'it fits your schedule'} Your recent sleep average is ${health.averageSleep?.toFixed(1)||'not yet known'} hours. You can move the suggestion if that time does not work.`,evidence:'movement'};
       if(/stress|overwhelmed|anxious/.test(q)) return {text:'That sounds like a demanding day. Your fixed classes stay put. A short pause or breathing break between commitments may feel more manageable than adding a workout.',evidence:'stress'};
@@ -113,11 +132,11 @@
     preferredDuration(actions) { const done=(actions||[]).filter(a=>a.status==='completed'&&a.minutes),skipped=(actions||[]).filter(a=>a.status==='skipped').length;if(done.length<2)return skipped>=2?15:null;const average=Math.round(done.reduce((sum,a)=>sum+a.minutes,0)/done.length);return skipped>done.length?Math.min(average,15):average; }
   };
   const calendarService = {
-    ics(plan,approvedIds) {
+    ics(plan,approvedIds,actions=[]) {
       const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Pace Hackathon Demo//EN'];
-      for(const day of plan) for(const item of day.items) if(item.kind==='suggestion'&&approvedIds.includes(item.id)) {
+      for(const day of plan) for(const item of day.items) if(item.kind==='suggestion'&&approvedIds.includes(item.id)&&!actions.some(a=>a.id===item.id)) {
         const compact=day.date.replaceAll('-','');
-        lines.push('BEGIN:VEVENT',`UID:${item.id}@pace-demo`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'')}`,`DTSTART:${compact}T${item.time.replace(':','')}00`,`DTEND:${compact}T${item.end.replace(':','')}00`,`SUMMARY:${item.title.replace(/[,;]/g,' ')}`,'DESCRIPTION:Pace demo reminder. Review this suggestion against your own schedule.','END:VEVENT');
+        lines.push('BEGIN:VEVENT',`UID:${item.id}@pace-demo`,`DTSTAMP:${new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'')}`,`DTSTART;TZID=Asia/Singapore:${compact}T${item.time.replace(':','')}00`,`DTEND;TZID=Asia/Singapore:${compact}T${item.end.replace(':','')}00`,`SUMMARY:${item.title.replace(/[,;]/g,' ')}`,'DESCRIPTION:Pace demo reminder. Review this suggestion against your own schedule.','BEGIN:VALARM','TRIGGER:-PT10M','ACTION:DISPLAY','DESCRIPTION:Pace reminder','END:VALARM','END:VEVENT');
       }
       lines.push('END:VCALENDAR');return lines.join('\r\n');
     }

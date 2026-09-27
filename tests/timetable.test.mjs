@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
 const context=vm.createContext({window:{},crypto:webcrypto});
-for(const file of ['services.js','timetable.js'])vm.runInContext(readFileSync(new URL('../dist/'+file,import.meta.url),'utf8'),context);
+for(const file of ['services.js','timetable.js','journey.js'])vm.runInContext(readFileSync(new URL('../dist/'+file,import.meta.url),'utf8'),context);
 const S=context.window.PaceServices,T=S.timetableService;
 const sunday=new Date('2026-09-27T12:00:00'),monday=new Date('2026-09-28T12:00:00');
 const event=(id,start,end,title='Lecture',day='Mon')=>({id,day,start,end,title,location:'Campus',fixed:true});

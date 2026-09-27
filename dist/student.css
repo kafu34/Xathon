@@ -29,3 +29,6 @@
 
 .timetable-edit-button{margin-bottom:1rem}.event-date{grid-column:1/-1;display:flex;align-items:center;gap:1rem;font-size:.8rem}.event-date input{max-width:180px}.review-actions{gap:.75rem}.dated-change small{display:block;color:#647789;margin:.25rem 0 1rem}.confirmed-schedule h3{margin:1rem 0}
 button[hidden]{display:none!important}button:disabled{opacity:.5;cursor:not-allowed}
+
+.entry-row small{display:block;color:#647789;margin-top:.4rem}.entry-row{flex-wrap:wrap;gap:1rem}.reminder-queue{max-height:180px;overflow:auto}.reminder-queue p{padding:.5rem 0;border-bottom:1px solid #edf0f0}.day-item time small{display:block;font-size:.7rem}.item-actions span{font-size:.8rem;font-weight:700}.timetable-edit-row{grid-template-columns:60px minmax(112px,1fr) minmax(112px,1fr) 24px}.timetable-edit-row input[data-field=title],.timetable-edit-row input[data-field=location]{grid-column:2/4}.timetable-edit-row>button{grid-column:4;grid-row:1/4}
+@media(max-width:540px){.timetable-edit-row{grid-template-columns:54px minmax(85px,1fr) minmax(85px,1fr) 22px}.timetable-edit-row input{font-size:12px}.timetable-review{padding:14px}.review-actions{flex-wrap:wrap}.entry-row{padding:16px}.chat-bubble{max-width:94%}}
