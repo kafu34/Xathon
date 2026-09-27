@@ -4,6 +4,16 @@ import {readFileSync} from 'node:fs';
 const source=readFileSync(new URL('../dist/server/index.js',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const origin='https://pace.test';
+test('AI endpoint cannot falsely confirm a schedule mutation from an older client',async()=>{
+  const previous=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('Model must not handle a schedule mutation');};
+  try{const result=await(await send('/api/ai/coach',{...context,message:'On Wednesday add a Lab session at 3 pm'})).json();assert.equal(result.mode,'local');assert.match(result.reply,/Nothing has been saved/);}
+  finally{globalThis.fetch=previous;}
+});
+test('unsupported model mutation claims are replaced with an honest reply',async()=>{
+  const previous=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({reply:'Got it—your Lab session is now scheduled for Wednesday at 3 pm.',action:'none',evidence_key:'none'})}}]}),{status:200});
+  try{const result=await(await send('/api/ai/coach',{...context,message:'Can you help with my week?'})).json();assert.match(result.reply,/I have not changed/);assert.doesNotMatch(result.reply,/is now scheduled/);}
+  finally{globalThis.fetch=previous;}
+});
 test('serves timetable logic and student styles from the deployed bundle',async()=>{
   for(const [path,type,marker] of [['/timetable.js','application/javascript','changeFromChat'],['/student.css','text/css','timetable-edit-row']]){
     const response=await worker.fetch(new Request(origin+path),{});

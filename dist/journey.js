@@ -1,7 +1,7 @@
 /* Shared state, health records, goals, actions and reminder rules. */
 (() => {
   const S=window.PaceServices;
-  const defaults=()=>({profile:null,entries:[],deletedEntries:[],completed:[],schedule:[],actions:[],approved:[],weightEntries:[],feelings:[],preferences:{calendarOn:false,workoutTime:null},contextHistory:[],periods:[],chat:[],temporary:null,regularSchedule:null,preExamTemporary:null,recoveryPlan:null,recoveryFrom:null,aiConsent:false,aiConsentProvider:null,aiAnalysis:null,demo:false,sessionId:crypto.randomUUID()});
+  const defaults=()=>({profile:null,entries:[],deletedEntries:[],completed:[],schedule:[],actions:[],approved:[],weightEntries:[],feelings:[],preferences:{calendarOn:false,workoutTime:null},contextHistory:[],periods:[],chat:[],pendingTimetable:null,temporary:null,regularSchedule:null,preExamTemporary:null,recoveryPlan:null,recoveryFrom:null,aiConsent:false,aiConsentProvider:null,aiAnalysis:null,demo:false,sessionId:crypto.randomUUID()});
   const sorted=rows=>[...(rows||[])].sort((a,b)=>a.date.localeCompare(b.date));
   const validDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value||'')&&S.key(new Date(value+'T12:00:00'))===value;
   S.dataService={

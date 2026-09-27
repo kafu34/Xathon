@@ -4,10 +4,33 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
 const context=vm.createContext({window:{},crypto:webcrypto});
-for(const file of ['services.js','timetable.js','journey.js'])vm.runInContext(readFileSync(new URL('../dist/'+file,import.meta.url),'utf8'),context);
+for(const file of ['services.js','coach-actions.js','timetable.js','journey.js'])vm.runInContext(readFileSync(new URL('../dist/'+file,import.meta.url),'utf8'),context);
 const S=context.window.PaceServices,T=S.timetableService;
 const sunday=new Date('2026-09-27T12:00:00'),monday=new Date('2026-09-28T12:00:00');
 const event=(id,start,end,title='Lecture',day='Mon')=>({id,day,start,end,title,location:'Campus',fixed:true});
+test('the reported add-lab request asks for an end time, then really saves one dated event',()=>{
+  const schedule=[event('class','09:00','12:00','Class','Wed')];
+  const message='On Wednesday add a Lab session at 3 pm';
+  assert.equal(T.isAddRequest(message),true);
+  const draft=T.addFromChat(schedule,message,sunday);
+  assert.equal(draft.schedule,undefined);assert.equal(draft.pending.title,'Lab session');assert.equal(draft.pending.start,'15:00');assert.match(draft.text,/Nothing has been added/);
+  const result=T.addFromChat(schedule,'until 4 PM',sunday,draft.pending);
+  assert.ok(result.schedule,result.text);assert.equal(result.schedule.length,2);
+  const day=S.plannerAgent.build({},result.schedule,[],null,{},sunday)[3];
+  assert.equal(day.items.filter(i=>i.kind==='fixed').length,2);
+  assert.ok(day.items.some(i=>i.title==='Lab session'&&i.time==='15:00'&&i.end==='16:00'));
+  assert.equal(T.eventsOn(result.schedule,new Date('2026-10-07T12:00:00')).length,1);
+});
+test('add accepts an explicit range or duration, rejects clashes, and supports cancellation',()=>{
+  const schedule=[event('class','09:00','12:00','Class','Wed')];
+  for(const request of ['Add a lab on Wednesday from 3 PM to 4 PM','On Wednesday add a Lab session at 3 pm for 1 hour'])assert.ok(T.addFromChat(schedule,request,sunday).schedule);
+  assert.equal(T.addFromChat(schedule,'Add a lab Wednesday from 10 AM to 11 AM',sunday).schedule,undefined);
+  assert.equal(T.addFromChat(schedule,'Add a lab Wednesday at 11 PM for 2 hours',sunday).schedule,undefined);
+  assert.equal(T.addFromChat(schedule,'Add a lab Wednesday at 3',sunday).schedule,undefined);
+  const draft=T.addFromChat(schedule,'Add a lab Wednesday at 3 PM',sunday);
+  assert.equal(T.addFromChat(schedule,'cancel',sunday,draft.pending).pending,null);
+  assert.equal(context.window.PaceIntent.isScheduleRequest('What is on my schedule tomorrow?'),false);
+});
 test('repeated chat moves replace one occurrence and preserve next week',()=>{
   let schedule=[event('lecture','09:00','11:00')];
   for(const [from,to] of [['9 AM','12 PM'],['12 PM','2 PM'],['2 PM','4 PM']]){

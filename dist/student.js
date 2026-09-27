@@ -123,7 +123,22 @@ function renderCoachChat() {
   const list=state.chat.length?state.chat:[{role:'coach',text:'Hi! I’ll work around your fixed classes, exams and shifts. Ask why I chose a time, tell me what changed, or request an exam recovery plan.'}];
   $('#chat-messages').innerHTML=list.slice(-25).map(m=>`<div class="chat-bubble ${m.role}"><span>${m.role==='coach'?(m.model?'Pace AI Coach':'Pace Coach'):'You'}</span><p>${clean(m.text)}</p>${m.evidence?`<button data-evidence="${m.evidence}">View evidence</button>`:''}</div>`).join('');
   $('#chat-messages').scrollTop=$('#chat-messages').scrollHeight;
-  $('#coach-action').innerHTML=state.chat.at(-1)?.action==='recovery'?'<button class="primary-button" data-open="recovery">Create Recovery Plan</button>':'';
+  renderCoachActions();
+}
+function saveCoachSchedule(response){
+  const previous={schedule:state.schedule,recoveryPlan:state.recoveryPlan,aiAnalysis:state.aiAnalysis,pendingTimetable:state.pendingTimetable};
+  try{state.schedule=response.schedule;state.pendingTimetable=null;scheduleChanged();cancelTimetableDraft();setText('ocr-status','Saved timetable updated through Coach.');response.action='timetable-saved';}
+  catch{Object.assign(state,previous);response.text='I could not save the event because browser storage is unavailable. Nothing was added to your saved timetable. Please try again.';delete response.schedule;response.action='none';}
+}
+function renderCoachActions(){
+  const pending=state.pendingTimetable,node=$('#coach-action');
+  if(pending){
+    node.innerHTML=`<form id="coach-event-form" class="coach-event-form"><strong>Finish adding ${clean(pending.title)}</strong><p>${clean(pending.date||('Every '+pending.day))} · Nothing saved yet</p><label>Starts <input type="time" name="start" aria-label="New event start time" value="${clean(pending.start)}" required /></label><label>Ends <input type="time" name="end" aria-label="New event end time" value="${clean(pending.end||'')}" required /></label><button class="primary-button" type="submit">Save event</button><button class="outline-button" type="button" id="cancel-coach-event">Cancel draft</button></form>`;
+    $('#coach-event-form').addEventListener('submit',event=>{event.preventDefault();const form=new FormData(event.currentTarget);state.pendingTimetable={...state.pendingTimetable,start:String(form.get('start'))};handleCoachMessage('until '+form.get('end'));});
+    $('#cancel-coach-event').addEventListener('click',()=>handleCoachMessage('cancel'));return;
+  }
+  const action=state.chat.at(-1)?.action;
+  node.innerHTML=action==='recovery'?'<button class="primary-button" data-open="recovery">Create Recovery Plan</button>':action==='timetable-saved'?'<button class="outline-button" data-view="timetable">View saved timetable</button> <button class="primary-button" data-view="plan">View updated plan</button>':'';
 }
 function renderStudentSetup() {
   if(!studentDraft){studentDraft={...studentProfile(),baselineHr:state.profile?.baselineHr??null,goals:(state.profile?.goals||[state.profile?.goal].filter(Boolean)).filter(name=>S.goals.some(g=>g.name===name))};studentStep=1;}
@@ -189,7 +204,7 @@ function cancelTimetableDraft() {
   renderTimetableRows();
 }
 function sendCoachMessage(message) {
-  if(S.goalService.isRequest(message)||S.timetableService.isChangeRequest(message)||/(?:move|change).*(?:workout|walk|session)/i.test(message))handleCoachMessage(message);
+  if((state.pendingTimetable&&S.timetableService.isAddFollowup(message))||S.goalService.isRequest(message)||S.timetableService.isChangeRequest(message)||/(?:move|change).*(?:workout|walk|session)/i.test(message))handleCoachMessage(message);
   else if(window.PaceAI)window.PaceAI.coach(message);
   else handleCoachMessage(message);
 }
@@ -216,9 +231,14 @@ function handleCoachMessage(raw) {
   state.chat.push({role:'user',text:message});
   let response;
   if(S.goalService.isRequest(message)){response=S.goalService.change(state.profile,message);if(response.goals){state.profile.goals=response.goals;state.profile.goal=response.goals[0];state.aiAnalysis=null;}}
-  else if(S.timetableService.isChangeRequest(message)) {
+  else if(S.timetableService.isAddRequest(message)||(state.pendingTimetable&&S.timetableService.isAddFollowup(message))){
+    response=S.timetableService.addFromChat(state.schedule,message,new Date(),S.timetableService.isAddRequest(message)?null:state.pendingTimetable);
+    state.pendingTimetable=response.pending??null;
+    if(response.schedule)saveCoachSchedule(response);
+  }
+  else if(S.timetableService.isChangeRequest(message)&&!/(?:move|change).*(?:workout|walk)/i.test(message)) {
     response=S.timetableService.changeFromChat(state.schedule,message);
-    if(response.schedule){state.schedule=response.schedule;cancelTimetableDraft();setText('ocr-status','Saved timetable updated through Coach. Reopen the editor to make further changes.');scheduleChanged();}
+    if(response.schedule)saveCoachSchedule(response);
   } else {
     const move=message.match(/(?:move|change).*(?:workout|walk|session).*(?:to|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
     if(move){
@@ -230,8 +250,8 @@ function handleCoachMessage(raw) {
     }
     else {response=S.coachAgent.reply(message,{plan:studentPlan(),profile:studentProfile(),health:S.healthAgent.analyse(entries()),pattern:S.patternAgent.find(state.profile?state.entries:[],state.temporary)});if(response.action==='recovery')state.recoveryFrom=S.recoveryDate(message);}
   }
-  state.chat.push({role:'coach',text:response.text,evidence:response.evidence||null,action:response.action||'none'});persist();renderDashboard();
-  $('#coach-action').innerHTML=response.action==='recovery'?'<button class="primary-button" data-open="recovery">Create Recovery Plan <svg><use href="#i-arrow"/></svg></button>':'';
+  state.chat.push({role:'coach',text:response.text,evidence:response.evidence||null,action:response.action||'none'});try{persist();}catch{toast('Browser storage is unavailable. Your latest chat could not be saved.');}renderDashboard();
+  renderCoachActions();
 }
 document.addEventListener('click',event=>{
   const evidence=event.target.closest('[data-evidence]');if(evidence){if(!$('#modal-backdrop').hidden){const nodes=[...$('#modal-content').childNodes];modalReturn=()=>{$('#modal-content').replaceChildren(...nodes);evidence.focus();};renderEvidence(evidence.dataset.evidence);}else{openModal('evidence');renderEvidence(evidence.dataset.evidence);}return;}

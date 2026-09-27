@@ -72,7 +72,37 @@
     if(Array.isArray(state.regularSchedule))state.schedule=copy(state.regularSchedule);
     state.temporary=state.preExamTemporary||null;state.regularSchedule=null;state.preExamTemporary=null;
   };
-  T.isChangeRequest = text => /\b(change[ds]?|move[ds]?|reschedul\w*|shift\w*|updat\w*|cancel\w*)\b/i.test(text)&&/\b(class|lecture|lab|tutorial|exam|meeting|shift|timetable|schedule)\b/i.test(text);
+  T.isAddRequest = text => /\b(add|create|schedule|book|put|insert)\b/i.test(text)&&window.PaceIntent.isScheduleRequest(text);
+  T.isChangeRequest = text => window.PaceIntent.isScheduleRequest(text);
+  T.isAddFollowup = text => /^(?:(?:it|the (?:lab|class|session))\s+(?:ends|finishes)\s+)?(?:(?:until|to|at|for)\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm|hours?|hrs?|minutes?|mins?)?[.!]?$/i.test(text.trim())||/^(?:cancel|never mind|nevermind)$/i.test(text.trim());
+  T.addFromChat = (schedule,message,now=new Date(),pending=null) => {
+    if(/^(?:cancel|never mind|nevermind)$/i.test(message.trim()))return {pending:null,text:'Cancelled the event draft. Nothing was added.'};
+    const explicit=value=>/am|pm|[:.]/i.test(value)||Number(value)>12;
+    let event=pending?{...pending}:null,tail=message;
+    if(!event){
+      if(/\b(?:should|could)\s+I\b/i.test(message))return {text:'I can check a proposed event. To add it, tell me its name, day, start and end time.'};
+      const named=message.match(dayPattern),iso=message.match(/\b\d{4}-\d{2}-\d{2}\b/),weekly=/\b(every|each|weekly)\b/i.test(message);
+      let date=iso?new Date(iso[0]+'T12:00:00'):/\btomorrow\b/i.test(message)?S.addDays(now,1):/\btoday\b/i.test(message)?new Date(now):named?S.addDays(now,(S.days.indexOf(dayOf(named[1]))-now.getDay()+7)%7):null;
+      if(named&&/\bnext\b/i.test(message)&&date&&S.key(date)===S.key(now))date=S.addDays(date,7);
+      if(!date||!Number.isFinite(date.getTime())||(iso&&S.key(date)!==iso[0])||(!weekly&&S.key(date)<S.key(now)))return {text:'Nothing added yet. Include a valid day or date, for example “Add a lab on Wednesday from 3 PM to 4 PM”.'};
+      const startMatch=message.match(new RegExp(`\\b(?:at|from)\\s+(${clockPattern})(?=\\s|[.!?]|$)`,'i'));
+      if(!startMatch||!explicit(startMatch[1])||!T.clock(startMatch[1]))return {text:'Nothing added yet. Include a start time with AM/PM or 24-hour time, such as 3 PM or 15:00.'};
+      let title=message.slice(message.search(/\b(add|create|schedule|book|put|insert)\b/i)).replace(/^(add|create|schedule|book|put|insert)\s+(?:(?:a|an|the|my)\s+)?/i,'').split(/\b(?:at|from|on|every|each|tomorrow|today)\b/i)[0].replace(dayPattern,'').replace(/\bweekly\b/ig,'').replace(/["“”]/g,'').trim();
+      if(!title||title.length>80)return {text:'Nothing added yet. Include the event name, such as “Add a lab on Wednesday from 3 PM to 4 PM”.'};
+      event={id:crypto.randomUUID(),day:S.days[date.getDay()],date:weekly?undefined:S.key(date),start:T.clock(startMatch[1]),end:'',title:title[0].toUpperCase()+title.slice(1),location:'',fixed:true};
+      tail=message.slice(startMatch.index+startMatch[0].length);
+    }
+    const duration=tail.match(/\b(?:for\s+)?(\d+(?:\.\d+)?)\s*(hours?|hrs?|minutes?|mins?)\b/i);
+    const endMatch=tail.match(new RegExp(`(?:until|to|ends?\\s+at|finishes?\\s+at)\\s+(${clockPattern})(?=\\s|[.!?]|$)`,'i'));
+    const bare=pending?tail.trim().replace(/[.!]$/,''):null;
+    const rawEnd=endMatch?.[1]||(bare&&T.clock(bare)?bare:null);
+    let end=rawEnd&&explicit(rawEnd)?T.clock(rawEnd):null;
+    if(duration){const minutes=Number(duration[1])*(/hour|hr/i.test(duration[2])?60:1),finish=S.mins(event.start)+minutes;if(minutes>0&&Number.isInteger(minutes)&&finish<1440)end=S.time(finish);else return {pending:event,text:'Nothing added yet. Use a positive duration that finishes on the same day.'};}
+    if(!end)return {pending:event,text:`What time does ${event.title} end ${event.date?'on '+event.date:'every '+event.day}? It starts at ${event.start}. Reply “until 4 PM” or “for 1 hour”. Nothing has been added yet.`};
+    event.end=end;const error=T.validate([...schedule,event]);
+    if(error)return {pending:event,text:`Nothing added. ${error} Edit the start/end times below or cancel this draft.`};
+    return {pending:null,schedule:[...copy(schedule),event],event,text:`Saved ${event.title} ${event.date?'on '+event.date:'every '+event.day}, ${event.start}–${event.end}. It now appears in your timetable and plan.`};
+  };
   T.changeFromChat = (schedule,message,now=new Date()) => {
     const help='Tell me the event, day and new time, for example “Move my lecture tomorrow from 9 AM to 11 AM”. You can also use Edit saved timetable.';
     if(/\bcancel\w*\b/i.test(message))return {text:'Use Edit saved timetable to remove a cancelled event and confirm the updated schedule.'};

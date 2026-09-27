@@ -19,9 +19,16 @@
 | AI | Includes supplied feelings, notes and workout context; serializes chat requests, bounds waiting time, cancels requests when sharing is revoked, and rejects stale responses after state changes. Local guidance and recovery remain available when live AI fails or sharing is declined. |
 | Mobile | Timetable inputs reflow so AM/PM values remain readable. Future completion controls are visibly disabled. |
 
+## Coach add-event regression fix
+
+- Coach now saves add-event requests through the timetable code. Missing end times produce a draft and a follow-up prompt or time form, with no false saved confirmation.
+- Saved events update the timetable and four-day plan together. Conflicts are rejected, and pending drafts can be cancelled.
+- The AI endpoint blocks timetable mutation claims; clients revalidate assets on reload.
+- Browser verified the exact report: Wednesday Lab at 3 PM, supply a 4 PM end, then reload. Wednesday retained the 15:00–16:00 lab, two fixed commitments, and a break recalculated to 16:20.
+
 ## Verification
 
-- 28 automated tests across `journey.test.mjs`, `timetable.test.mjs` and `worker.test.mjs`.
+- 32 automated tests across `journey.test.mjs`, `timetable.test.mjs` and `worker.test.mjs`.
 - Two real Groq requests, using synthetic context: analysis and chatbot both returned successful model responses.
 - Browser: complete personal onboarding, evidence round-trip, partial check-in, historical edit/delete/undo, goal change, plan completion, reminder toggle, Thursday all-nighter → Friday recovery, complete reset and reload, and 390px mobile timetable/plan.
 - No browser console errors in those exercised flows.
@@ -45,3 +52,4 @@ The optional `live-ai-smoke.mjs` uses synthetic data and an existing server-side
 - **Chat actions:** supported timetable, movement-time and named-goal changes use constrained parsers. Unsupported or ambiguous changes require the editor; arbitrary LLM-generated actions are not executed.
 - **Goal ordering and evidence:** the suggested goal order is a local heuristic. Evidence comes from curated references, not a live literature retrieval service.
 - **Persistence:** local browser storage can be cleared by the browser/user. This prototype has no cloud backup, background jobs or push-reminder delivery.
+

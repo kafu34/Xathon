@@ -79,9 +79,10 @@ async function api(request,env,kind) {
       return json({mode:'model',forecast:prediction,summary:safeText(output.summary,500)||'Your recent data can help plan small steps around your timetable.',reason:safeText(output.reason,350)||chosen?.reason||'',recommendedItem:chosen?{id:chosen.id,date:chosen.date,time:chosen.time,title:chosen.title}:null,evidenceKey:EVIDENCE[output.evidence_key]?output.evidence_key:null,sampleData:context.demo});
     }
     const message=cut(raw.message,700);if(!message)return json({error:'message_required'},400);
+    if(globalThis.PaceIntent.isScheduleRequest(message))return json({mode:'local',reply:'Nothing has been saved by the AI service. Reload Pace to use the timetable editor in Coach, or open Timetable and confirm the event there. Include a day, start and end time.',action:'none',evidenceKey:null,sampleData:context.demo});
     const output=await askModel(env,'coach',{message,history,profile:context.profile,temporary:context.temporary,latestCheckins:context.entries.slice(-7),followThrough:followThrough(context.actions),forecast:prediction,plan:context.plan,evidence:EVIDENCE});
     const allNighter=/all.?night|stay up all night|pull an all/i.test(message),medical=/(?:medicat|prescrip|dosage|fracture|acl|surgery|rehab|diagnos|hypertension|diabetes)/i.test(message);
-    const reply=medical?'I can help with a general routine, but treatment, medication and rehabilitation decisions belong with your doctor or physiotherapist. I can keep optional activity light and work around your fixed commitments.':safeText(output.reply,750)||'I can help you find a manageable step around your fixed timetable. What changed today?';
+    const reply=medical?'I can help with a general routine, but treatment, medication and rehabilitation decisions belong with your doctor or physiotherapist. I can keep optional activity light and work around your fixed commitments.':(!globalThis.PaceIntent.claimsMutation(output.reply)&&safeText(output.reply,750))||'I have not changed your saved timetable. Use Coach’s event form or Timetable to save a change. I can help you find a manageable step around your fixed timetable. What changed today?';
     return json({mode:'model',reply,action:allNighter||/recover/i.test(message)&&output.action==='recovery'?'recovery':'none',evidenceKey:EVIDENCE[output.evidence_key]?output.evidence_key:null,sampleData:context.demo});
   } catch(error) {return error.message==='provider_rate_limited'?json({error:'rate_limited'},429):json({error:'model_unavailable'},502);}
 }
@@ -94,6 +95,6 @@ export default {
     const assetPath=path==='/'?'/index.html':path;
     if(!Object.hasOwn(ASSETS,assetPath))return new Response('Not found',{status:404});
     const type=MIME[assetPath]||MIME[assetPath.slice(assetPath.lastIndexOf('.'))]||'text/plain; charset=utf-8';
-    return new Response(request.method==='HEAD'?null:ASSETS[assetPath],{headers:{'content-type':type,'x-content-type-options':'nosniff','cache-control':assetPath==='/index.html'?'no-cache':'public, max-age=300'}});
+    return new Response(request.method==='HEAD'?null:ASSETS[assetPath],{headers:{'content-type':type,'x-content-type-options':'nosniff','cache-control':'no-cache'}});
   }
 };

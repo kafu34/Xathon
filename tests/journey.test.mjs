@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {webcrypto} from 'node:crypto';
 const context=vm.createContext({window:{},crypto:webcrypto});
-for(const file of ['services.js','timetable.js','journey.js'])vm.runInContext(readFileSync(new URL('../dist/'+file,import.meta.url),'utf8'),context);
+for(const file of ['services.js','coach-actions.js','timetable.js','journey.js'])vm.runInContext(readFileSync(new URL('../dist/'+file,import.meta.url),'utf8'),context);
 const S=context.window.PaceServices,now=new Date('2026-09-27T10:00:00');
 const personal=()=>({...S.dataService.defaults(),profile:{goals:['Improve fitness'],goal:'Improve fitness',bedtime:'23:30',wake:'07:30'}});
 test('blank health inputs remain unknown and do not create a readiness score',()=>{
