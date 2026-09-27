@@ -40,26 +40,7 @@
     },
     fromCheckins(checkins) { return checkins.map(row => this.normalize({...row,timestamp:`${row.date}T12:00:00`},row.source||'manual')); }
   };
-  const timetableService = {
-    parse(text) {
-      const out=[]; let day=null;
-      for(const line of String(text).split(/\r?\n/).map(s=>s.trim()).filter(Boolean)) {
-        const found=line.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i);
-        if(found) day=found[1].slice(0,3).toLowerCase().replace(/^./,c=>c.toUpperCase());
-        const times=line.match(/\b(\d{1,2})[:.](\d{2})\s*(?:-|–|—|to)\s*(\d{1,2})[:.](\d{2})\b/i);
-        if(!day || !times) continue;
-        const start=`${pad(+times[1])}:${times[2]}`, end=`${pad(+times[3])}:${times[4]}`;
-        if(mins(end)<=mins(start)) continue;
-        const tail=line.slice((times.index||0)+times[0].length).replace(/^\s*[-|:]\s*/,'').trim();
-        const detail=tail || line.slice(0,times.index).replace(found?.[0]||'','').trim() || 'Class';
-        const parts=detail.split(/\s+(?:@|\|)\s+|\s+[—–-]\s+(?=(?:room|block|campus|hall|level)\b)/i);
-        const title=(parts[0]||'Class').slice(0,80),location=(parts.slice(1).join(' ')||'').slice(0,80);
-        out.push({id:crypto.randomUUID(),day,start,end,title,location,fixed:true});
-      }
-      return out;
-    },
-    eventsOn(schedule,date) { const specific=(schedule||[]).filter(e=>e.date===key(date)),replaced=new Set(specific.map(e=>e.replacesId).filter(Boolean));return [...(schedule||[]).filter(e=>!e.date&&e.day===days[date.getDay()]&&!replaced.has(e.id)),...specific].sort((a,b)=>mins(a.start)-mins(b.start)); }
-  };
+  const timetableService = {}; // Implemented by timetable.js before the app starts.
   const profileAgent = { context(profile,temporary) { return {goals:profile.goals||[profile.goal].filter(Boolean),routine:profile.routine,conditions:profile.conditions||'',injuries:profile.injuries||'',temporary}; } };
   const healthAgent = {
     analyse(rows) {
@@ -69,9 +50,10 @@
   };
   const patternAgent = {
     find(rows,temporary) {
-      const baseline=(rows||[]).filter(r=>!r.temporary || temporary?.learning==='temporary-baseline' && r.temporary===temporary?.label);
+      const baseline=(rows||[]).filter(r=>temporary?.active&&temporary.learning==='temporary-baseline' ? r.temporary===temporary.label&&(!temporary.started||r.date>=temporary.started) : !r.temporary);
       if(baseline.length<3) return {title:'Your personal baseline is forming',detail:`${baseline.length} of 3 check-ins collected. Temporary periods are kept separate.`,count:baseline.length};
       const recent=baseline.slice(-14), enough=recent.filter(r=>r.sleep!=null);
+      if(!enough.length)return {title:'Add sleep to a check-in',detail:'Your check-ins do not yet include sleep measurements.',count:baseline.length};
       const short=enough.filter(r=>r.sleep<7).length;
       return {title:short>=Math.ceil(enough.length/2)?'Sleep has been tight lately':'Your recent sleep is steadier',detail:`${short} of your last ${enough.length} logged nights were below seven hours. Personal observation — association, not proof of causation.`,count:baseline.length};
     }
@@ -87,8 +69,8 @@
         const preferred=preferences?.workoutTime?mins(preferences.workoutTime):last?last+20:17*60+30;
         const candidates=[preferred,...Array.from({length:169},(_,i)=>8*60+i*5).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred))];
         const start=candidates.find(fits);
-        const label=clinicalContext?'Rest break or movement if cleared':cautious?'Gentle movement or rest break':offset===0?'Walk after your commitments':'Short movement session';
-        const reason=clinicalContext?'Follow your clinician’s activity guidance; fixed commitments stay in place.':fixed.length?`Fits after ${fixed.at(-1).title}; fixed commitments stay in place.`:'Fits a free window in your day.';
+        const label=clinicalContext?'Rest break or movement if cleared':cautious?'Gentle movement or rest break':offset===0?'Walk in a free window':'Short movement session';
+        const reason=clinicalContext?'Follow your clinician’s activity guidance; fixed commitments stay in place.':fixed.length?`Fits a free window around your ${fixed.length} fixed commitment${fixed.length===1?'':'s'}.`:'Fits a free window in your day.';
         const suggested=start===undefined?null:{id:`movement-${key(date)}`,time:time(start),end:time(start+duration),title:label,kind:'suggestion',minutes:duration,evidence:'movement',reason};
         const bedtime=mins(profile.bedtime||'23:30'), wind=bedtime-45;
         const items=[...busy,...(suggested?[suggested]:[])];
@@ -98,13 +80,20 @@
       });
     },
     recovery(profile,schedule,baseDate=new Date()) {
-      const next=addDays(baseDate,1), fixed=timetableService.eventsOn(schedule,next), finish=fixed.reduce((m,e)=>Math.max(m,mins(e.end)),0);
-      return {date:key(next),items:[
-        {time:'08:00',title:'Drink water and eat when you can',evidence:'nutrition'},
-        {time:finish && finish<21*60?time(Math.min(finish+30,20*60)):'13:00',title:'Take a rest opportunity after fixed commitments',evidence:'sleep'},
-        {time:'19:00',title:'Keep activity light; skip intense training if exhausted',evidence:'movement'},
-        {time:profile.bedtime||'23:30',title:'Ease back toward your usual sleep routine',evidence:'sleep'}
-      ],note:'An all-nighter is not healthy. This plan works around your commitments and does not replace medical advice.'};
+      const next=addDays(baseDate,1),fixed=timetableService.eventsOn(schedule,next);
+      const occupied=fixed.map(e=>[mins(e.start),mins(e.end)]),items=[];
+      const add=(preferred,duration,title,evidence,earliest=8*60,latest=24*60)=>{
+        const candidates=Array.from({length:193},(_,i)=>8*60+i*5).filter(t=>t>=earliest&&t+duration<=latest).sort((a,b)=>Math.abs(a-preferred)-Math.abs(b-preferred)||a-b);
+        const start=candidates.find(t=>!occupied.some(([a,b])=>t<b&&t+duration>a));
+        if(start===undefined)return;
+        occupied.push([start,start+duration]);items.push({time:time(start),end:time(start+duration),minutes:duration,title,evidence});
+      };
+      add(8*60,15,'Drink water and eat when you can','nutrition',8*60,12*60);
+      add(13*60,20,'Take a rest opportunity in a free window','sleep',12*60,20*60);
+      add(19*60,10,'Keep activity light; skip intense training if exhausted','movement',16*60,22*60);
+      add(Math.max(8*60,mins(profile.bedtime||'23:30')-30),15,'Ease back toward your usual sleep routine','sleep',18*60);
+      items.sort((a,b)=>mins(a.time)-mins(b.time));
+      return {date:key(next),items,note:items.length?'These optional recovery windows avoid your fixed commitments. An all-nighter is not healthy; this plan does not replace medical advice.':'No free recovery window was found. Review your timetable; fixed commitments have not been moved.'};
     }
   };
   const coachAgent = {

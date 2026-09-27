@@ -9,6 +9,7 @@ state.contextHistory ||= [];
 state.periods ||= [];
 state.chat ||= [];
 let studentStep=1, studentDraft=null, draftEvents=[], selectedTrend='sleep', uploadedObjectUrl=null;
+let draftReady=false, ocrPending=false, ocrGeneration=0;
 const clean = escapeHTML;
 const numberOrNull = value => value===''||value==null ? null : Number(value);
 const demoEvents = [
@@ -24,7 +25,7 @@ function loadAlexDemo() {
   state.profile={name:'Alex Tan',age:20,school:'National University of Singapore',height:173,weight:72,goals:['Increase energy','Improve fitness'],goal:'Increase energy',conditions:'',injuries:'',lifestyle:'Late-night studying and occasional caffeine',routine:'Study',start:'09:00',end:'18:00',days:['Mon','Tue','Wed','Thu','Fri'],bedtime:'23:30',wake:'07:30',baselineHr:72};
   const sleeps=[6.1,5.7,6.3,5.4,5.8,6.0,6.2],steps=[4200,5200,4700,3900,5100,4800,5700];
   state.entries=sleeps.map((sleep,i)=>({date:dateOffset(i-6),sleep,energy:i===6?2:3,stress:i>=4?4:3,activity:i===3?25:10,steps:steps[i],hr:72+(i===3?2:0),workout:i===3?'Walk':'None',feeling:i===6?'Tired':'Okay',source:'demo',temporary:null}));
-  state.schedule=demoEvents.map(e=>({...e}));state.weightEntries=[{date:dateOffset(-6),weight:72}];state.actions=[];state.approved=[];state.preferences={calendarOn:false,workoutTime:null};state.temporary=null;state.demo=true;
+  state.schedule=demoEvents.map(e=>({...e}));state.weightEntries=[{date:dateOffset(-6),weight:72}];state.actions=[];state.approved=[];state.preferences={calendarOn:false,workoutTime:null};state.temporary=null;state.regularSchedule=null;state.preExamTemporary=null;state.recoveryPlan=null;state.aiAnalysis=null;state.completed=[];state.chat=[];state.demo=true;cancelTimetableDraft();
   persist();closeModal();renderDashboard();showView('dashboard');toast('Alex demo loaded. All measurements are sample data.');
 }
 function renderWelcome() {
@@ -46,7 +47,7 @@ function renderStudentPanels() {
 }
 window.renderStudentPanels=renderStudentPanels;
 function syncTodayPlan() {
-  const item=studentPlan()[0]?.items.find(i=>i.id.startsWith('movement-'));if(!item){setText('plan-title','Keep your fixed commitments');setText('plan-description','No open movement window was found today. Check your timetable or choose a lighter day.');return;}
+  const item=studentPlan()[0]?.items.find(i=>i.id.startsWith('movement-'));if(!item){for(const id of ['plan-title','plan-page-title'])setText(id,'Keep your fixed commitments');for(const id of ['plan-description','plan-page-copy'])setText(id,'No open movement window was found today. Check your timetable or choose a lighter day.');for(const id of ['plan-time','plan-duration','plan-window','plan-intensity'])setText(id,'No movement scheduled');$('#complete-plan').disabled=true;return;}
   const cautious=item.minutes<=10;
   setText('plan-tag',cautious?'RECOVERY-FRIENDLY':'MOVEMENT');
   setText('plan-title',item.title);setText('plan-page-title',item.title);
@@ -54,7 +55,7 @@ function syncTodayPlan() {
   setText('plan-time',`${item.minutes} min · ${item.time}`);setText('plan-duration',`${item.minutes} minutes`);setText('plan-window',item.time);setText('plan-intensity',cautious?'Gentle or rest':'Easy to moderate');
 }
 function renderContext() {
-  const profile=studentProfile(), plan=studentPlan(), next=plan.flatMap(d=>d.items.filter(i=>i.kind==='fixed').map(i=>({...i,date:d.date}))).find(i=>i.date>=dayKey());
+  const profile=studentProfile(), plan=studentPlan(), next=plan.flatMap(d=>d.items.filter(i=>i.kind==='fixed').map(i=>({...i,date:d.date}))).find(i=>i.date>dayKey()||(i.date===dayKey()&&S.mins(i.end)>new Date().getHours()*60+new Date().getMinutes()));
   const goal=profile.goals?.[0]||profile.goal||'Build a healthier routine';
   const feeling=state.entries.at(-1)?.feeling||state.feelings.at(-1)?.feeling||'Not logged';
   $('#student-context').innerHTML=`<div><span>NEXT COMMITMENT</span><strong>${next?`${clean(next.title)} · ${clean(next.day||new Date(next.date+'T12:00:00').toLocaleDateString('en-SG',{weekday:'short'}))} ${next.time}`:'No fixed event ahead'}</strong></div><div><span>TOP GOAL</span><strong>${clean(goal)}</strong></div><div><span>HOW YOU FEEL</span><strong>${clean(feeling)}</strong></div><button data-view="timetable">Edit timetable <svg><use href="#i-arrow"/></svg></button>`;
@@ -68,7 +69,7 @@ function renderFourDayPlan() {
 const trendConfig={sleep:{label:'Sleep',unit:'h',field:'sleep',goal:'Your goal: at least 7 hours, if feasible',guide:'HealthHub: adults should strive for at least 7 hours'},steps:{label:'Steps',unit:'',field:'steps',goal:'Compare with your own recent baseline',guide:'No universal step target is assumed'},activity:{label:'Active minutes',unit:'min',field:'activity',goal:'Your goal: build a repeatable routine',guide:'Singapore guideline: 150–300 moderate minutes per week'},hr:{label:'Resting HR',unit:'bpm',field:'hr',goal:'Compare with your own baseline only',guide:'A trend here is not a diagnosis'},stress:{label:'Stress',unit:'/5',field:'stress',goal:'Your goal: notice changes during busy periods',guide:'Self-reported; not a clinical measure'},weight:{label:'Weight',unit:'kg',field:'weight',goal:'Weekly check-ins, without pressure',guide:'No weight-loss score or medical claim'},adherence:{label:'Plan follow-through',unit:'%',field:'adherence',goal:'A realistic plan is one you can actually do',guide:'Completion is not a measure of health worth'}};
 function renderStudentTrends() {
   const rows=state.profile?state.entries:sampleEntries, weights=state.weightEntries||[], cfg=trendConfig[selectedTrend];
-  const values=selectedTrend==='weight'?weights.slice(-7).map(x=>({date:x.date,value:x.weight})):selectedTrend==='adherence'?Array.from({length:7},(_,i)=>{const date=dateOffset(i-6),all=state.approved.filter(id=>id.endsWith(date)),done=state.actions.filter(a=>a.date===date&&a.status==='completed');return {date,value:all.length?Math.round(done.length/all.length*100):null};}):rows.slice(-7).map(x=>({date:x.date,value:x[cfg.field]}));
+  const values=selectedTrend==='weight'?weights.slice(-7).map(x=>({date:x.date,value:x.weight})):selectedTrend==='adherence'?Array.from({length:7},(_,i)=>{const date=dateOffset(i-6),all=state.approved.filter(id=>id.endsWith(date)),done=state.actions.filter(a=>a.date===date&&a.status==='completed'&&all.includes(a.id));return {date,value:all.length?Math.round(done.length/all.length*100):null};}):rows.slice(-7).map(x=>({date:x.date,value:x[cfg.field]}));
   const valid=values.map(v=>v.value).filter(v=>v!==null&&v!==undefined).map(Number).filter(Number.isFinite),max=Math.max(...valid,selectedTrend==='stress'?5:selectedTrend==='sleep'?9:1);
   $('#student-trends').innerHTML=`<article class="surface trends-card"><div class="section-heading inner"><div><h2>Health trends</h2><p>Personal observations alongside sensible reference points</p></div></div><div class="trend-tabs">${Object.keys(trendConfig).map(key=>`<button class="trend-tab ${key===selectedTrend?'active':''}" data-trend="${key}">${trendConfig[key].label}</button>`).join('')}</div><div class="trend-bars">${values.length?values.map(v=>`<div class="trend-column" title="${clean(v.date)}: ${v.value??'No data'}"><span>${v.value==null?'—':`${v.value}${cfg.unit}`}</span><div class="trend-bar" style="height:${v.value==null?2:Math.max(5,Math.round(Number(v.value)/max*100))}%"></div><small>${new Date(v.date+'T12:00:00').toLocaleDateString('en-SG',{weekday:'short'}).slice(0,2)}</small></div>`).join(''):'<p class="empty-copy">No entries yet.</p>'}</div><div class="trend-notes"><span>${clean(cfg.goal)}</span><small>${clean(cfg.guide)}</small></div></article>`;
 }
@@ -78,7 +79,11 @@ function renderHealthFact() {
 }
 function renderConfirmedSchedule() {
   const node=$('#confirmed-schedule');if(!node)return;
-  node.innerHTML=state.schedule.length?S.days.slice(1).concat('Sun').map(day=>{const events=state.schedule.filter(e=>e.day===day).sort((a,b)=>S.mins(a.start)-S.mins(b.start));return events.length?`<div class="schedule-day"><strong>${day}</strong><div>${events.map(e=>`<p><time>${e.start}–${e.end}</time><span>${clean(e.title)}${e.location?` · ${clean(e.location)}`:''}</span></p>`).join('')}</div></div>`:'';}).join(''):`<div class="empty-copy">No confirmed timetable yet. Upload a screenshot or add events manually.</div>`;
+  const row=e=>`<p><time>${clean(e.start)}–${clean(e.end)}</time><span>${clean(e.title)}${e.location?` · ${clean(e.location)}`:''}</span></p>`;
+  const weekly=S.days.slice(1).concat('Sun').map(day=>{const events=state.schedule.filter(e=>!e.date&&e.day===day).sort((a,b)=>S.mins(a.start)-S.mins(b.start));return events.length?`<div class="schedule-day"><strong>${day}</strong><div>${events.map(row).join('')}</div></div>`:'';}).join('');
+  const dates=[...new Set(state.schedule.filter(e=>e.date).map(e=>e.date))].sort();
+  const changes=dates.map(date=>{const events=S.timetableService.eventsOn(state.schedule,new Date(date+'T12:00:00')).filter(e=>e.date);return `<div class="schedule-day dated-change"><strong>${clean(date)}</strong><div>${events.map(e=>`${row(e)}<small>${e.replacesId?'Replaces the weekly event on this date only.':'One-off event.'}</small>`).join('')}</div>`;}).join('');
+  node.innerHTML=state.schedule.length?`<h3>${Array.isArray(state.regularSchedule)?'Temporary exam timetable':'Weekly timetable'}</h3>${weekly||'<p>No repeating events.</p>'}${changes?'<h3>Changes for specific dates</h3>'+changes:''}`:'<div class="empty-copy">No confirmed timetable yet. Upload a screenshot or add events manually.</div>';
 }
 function renderStudentSettings() {
   const p=studentProfile(),weight=state.weightEntries.at(-1),temp=state.temporary;
@@ -131,21 +136,43 @@ function renderTemporaryMode() {
   const active=state.temporary?.active;
   $('#modal-content').innerHTML=`<p class="modal-kicker">TEMPORARY CONTEXT</p><h2 id="modal-title">A different week should not redefine you.</h2><p class="modal-intro">Mark an exam, illness, injury or unusual schedule. Pace keeps this period separate from your regular baseline.</p>${active?`<div class="notice"><strong>${clean(state.temporary.label)}</strong> is active. Learning mode: ${state.temporary.learning==='pause'?'paused':'separate temporary baseline'}.</div><div class="modal-actions"><button class="link-button" id="temporary-close">Keep active</button><button class="primary-button" id="temporary-end">End period</button></div>`:`<form id="temporary-form"><div class="form-grid"><div class="field full"><label for="temporary-label">What changed?</label><select id="temporary-label" name="label"><option>Exam period</option><option>Injury</option><option>Illness</option><option>Surgery recovery</option><option>Travel</option><option>Unusual work schedule</option><option>Other temporary change</option></select></div><div class="field full"><span class="field-label">How should learning work?</span><label class="radio-line"><input type="radio" name="learning" value="pause" checked /> Pause learning from this period</label><label class="radio-line"><input type="radio" name="learning" value="temporary-baseline" /> Create a separate temporary baseline</label></div></div><div class="modal-actions"><button class="link-button" type="button" id="temporary-close">Cancel</button><button class="primary-button" type="submit">Start temporary mode</button></div></form>`}`;
   $('#temporary-close').addEventListener('click',closeModal);
-  if(active)$('#temporary-end').addEventListener('click',()=>{state.periods.push({...state.temporary,ended:dayKey()});if(state.temporary.label==='Exam period'&&state.regularSchedule?.length)state.schedule=state.regularSchedule;state.temporary=null;persist();closeModal();renderDashboard();toast('Back to your regular baseline. Past data stays labelled.');});
+  if(active)$('#temporary-end').addEventListener('click',()=>{S.timetableService.endTemporary(state);cancelTimetableDraft();closeModal();scheduleChanged();toast('Temporary period ended. Your previous timetable and context are restored.');});
   else $('#temporary-form').addEventListener('submit',event=>{event.preventDefault();const f=new FormData(event.currentTarget);state.temporary={active:true,label:String(f.get('label')),learning:String(f.get('learning')),started:dayKey()};persist();closeModal();renderDashboard();toast('Temporary mode is active.');});
 }
 function renderRecoveryPlan() {
   const plan=S.plannerAgent.recovery(studentProfile(),state.schedule,state.recoveryFrom?new Date(`${state.recoveryFrom}T12:00:00`):new Date());
-  $('#modal-content').innerHTML=`<p class="modal-kicker">AFTER AN ALL-NIGHTER</p><h2 id="modal-title">A gentler plan for tomorrow.</h2><p class="modal-intro">Your classes and exam remain fixed. This is general recovery guidance, not a way to make lost sleep harmless.</p><div class="recovery-list">${plan.items.map(i=>`<div><time>${i.time}</time><strong>${clean(i.title)}</strong><button data-evidence="${i.evidence}">Evidence</button></div>`).join('')}</div><div class="notice">${clean(plan.note)}</div><div class="modal-actions"><button class="link-button" id="recovery-cancel">Close</button><button class="primary-button" id="recovery-save">Add to my plan</button></div>`;
+  $('#modal-content').innerHTML=`<p class="modal-kicker">AFTER AN ALL-NIGHTER</p><h2 id="modal-title">A gentler plan for ${clean(plan.date)}.</h2><p class="modal-intro">Your classes and exam remain fixed. This is general recovery guidance, not a way to make lost sleep harmless.</p><div class="recovery-list">${plan.items.map(i=>`<div><time>${i.time}</time><strong>${clean(i.title)}</strong><button data-evidence="${i.evidence}">Evidence</button></div>`).join('')}</div><div class="notice">${clean(plan.note)}</div><div class="modal-actions"><button class="link-button" id="recovery-cancel">Close</button><button class="primary-button" id="recovery-save">Add to my plan</button></div>`;
   $('#recovery-cancel').addEventListener('click',closeModal);
   $('#recovery-save').addEventListener('click',()=>{state.recoveryPlan=plan;persist();closeModal();renderDashboard();showView('plan');toast('Recovery plan added around fixed commitments.');});
 }
 function renderTimetableRows() {
-  $('#timetable-rows').innerHTML=draftEvents.length?draftEvents.map((event,index)=>`<div class="timetable-edit-row" data-row="${index}"><select aria-label="Day for event ${index+1}" data-field="day">${S.days.slice(1).concat('Sun').map(day=>`<option ${event.day===day?'selected':''}>${day}</option>`).join('')}</select><input type="time" aria-label="Start time for event ${index+1}" data-field="start" value="${clean(event.start)}" /><input type="time" aria-label="End time for event ${index+1}" data-field="end" value="${clean(event.end)}" /><input aria-label="Activity name for event ${index+1}" data-field="title" maxlength="80" value="${clean(event.title)}" placeholder="Class / exam / shift" /><input aria-label="Location for event ${index+1}" data-field="location" maxlength="80" value="${clean(event.location||'')}" placeholder="Location" /><button aria-label="Remove event ${index+1}" data-remove-row="${index}">×</button></div>`).join(''):'<p class="empty-copy">Upload a timetable image, use Alex’s sample, or add rows manually.</p>';
+  $('#timetable-rows').innerHTML=draftEvents.length?draftEvents.map((event,index)=>`<div class="timetable-edit-row" data-row="${index}"><select aria-label="Day for event ${index+1}" data-field="day" ${event.date?'disabled':''}>${S.days.slice(1).concat('Sun').map(day=>`<option ${event.day===day?'selected':''}>${day}</option>`).join('')}</select><input type="time" aria-label="Start time for event ${index+1}" data-field="start" value="${clean(event.start)}" /><input type="time" aria-label="End time for event ${index+1}" data-field="end" value="${clean(event.end)}" /><input aria-label="Activity name for event ${index+1}" data-field="title" maxlength="80" value="${clean(event.title)}" placeholder="Class / exam / shift" /><input aria-label="Location for event ${index+1}" data-field="location" maxlength="80" value="${clean(event.location||'')}" placeholder="Location" /><button aria-label="Remove event ${index+1}" data-remove-row="${index}">×</button>${event.date?`<label class="event-date">This date only <input type="date" aria-label="Date for event ${index+1}" data-field="date" value="${clean(event.date)}" /></label>`:''}</div>`).join(''):'<p class="empty-copy">Upload a timetable image, edit saved events, or add rows manually.</p>';
+  $('#confirm-timetable').disabled=ocrPending||!draftReady;
+  $('#cancel-timetable').hidden=!draftReady&&!ocrPending;
 }
-function readDraftRow(event) {const row=event.target.closest('[data-row]');if(!row)return;draftEvents[Number(row.dataset.row)][event.target.dataset.field]=event.target.value;}
+function readDraftRow(event) {const row=event.target.closest('[data-row]');if(!row)return;const item=draftEvents[Number(row.dataset.row)];item[event.target.dataset.field]=event.target.value;if(event.target.dataset.field==='date'&&event.target.value){item.day=S.days[new Date(event.target.value+'T12:00:00').getDay()];row.querySelector('select').value=item.day;}}
+function beginTimetableDraft(rows,exam=false) {
+  ocrGeneration++;ocrPending=false;draftReady=true;draftEvents=rows.map(e=>({...e}));
+  $('#exam-timetable').checked=exam;$('#ocr-raw')?.remove();renderTimetableRows();
+}
+function scheduleChanged() {
+  state.aiAnalysis=null;
+  if(state.recoveryPlan?.date)state.recoveryPlan=S.plannerAgent.recovery(studentProfile(),state.schedule,S.addDays(new Date(state.recoveryPlan.date+'T12:00:00'),-1));
+  persist();renderDashboard();
+}
+function cancelTimetableDraft() {
+  ocrGeneration++;ocrPending=false;draftReady=false;draftEvents=[];
+  $('#ocr-raw')?.remove();$('#timetable-preview-image').hidden=true;$('#timetable-file').value='';
+  renderTimetableRows();
+}
+function sendCoachMessage(message) {
+  if(S.timetableService.isChangeRequest(message)||/(?:move|change).*(?:workout|walk|session)/i.test(message))handleCoachMessage(message);
+  else if(window.PaceAI)window.PaceAI.coach(message);
+  else handleCoachMessage(message);
+}
 async function extractTimetable(file) {
   if(!file?.type.startsWith('image/')){toast('Choose an image file.');return;}
+  const generation=++ocrGeneration;ocrPending=true;draftReady=false;draftEvents=[];$('#ocr-raw')?.remove();renderTimetableRows();
   if(uploadedObjectUrl)URL.revokeObjectURL(uploadedObjectUrl);
   uploadedObjectUrl=URL.createObjectURL(file);$('#timetable-preview-image').src=uploadedObjectUrl;$('#timetable-preview-image').hidden=false;
   setText('ocr-status','Reading text from image in your browser…');
@@ -153,28 +180,30 @@ async function extractTimetable(file) {
     if(!window.Tesseract)await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';script.onload=resolve;script.onerror=()=>reject(new Error('OCR library could not load'));document.head.append(script);});
     const worker=await window.Tesseract.createWorker('eng');
     let text='';try {const result=await worker.recognize(file);text=result.data.text||'';} finally {await worker.terminate();}
-    draftEvents=S.timetableService.parse(text);
-    renderTimetableRows();
+    if(generation!==ocrGeneration)return;
+    draftEvents=S.timetableService.parse(text);draftReady=true;
     const detail=document.getElementById('ocr-raw');if(detail)detail.remove();
     $('#timetable-rows').insertAdjacentHTML('afterend',`<details id="ocr-raw"><summary>See OCR text</summary><pre>${clean(text||'No text detected')}</pre></details>`);
     setText('ocr-status',draftEvents.length?`${draftEvents.length} possible event${draftEvents.length===1?'':'s'} found. Please review each row.`:'No clear day/time rows found. Use Add event to enter them manually.');
-  } catch(error) {setText('ocr-status','Automatic reading was unavailable. You can add events manually.');toast('OCR unavailable; manual review is ready.');}
+  } catch(error) {if(generation!==ocrGeneration)return;setText('ocr-status','Automatic reading was unavailable. Your saved timetable is unchanged. Add events manually or try another image.');toast('OCR unavailable; saved events are unchanged.');}
+  finally {if(generation===ocrGeneration){ocrPending=false;renderTimetableRows();}}
 }
 function handleCoachMessage(raw) {
   const message=String(raw||'').trim();if(!message)return;
   state.chat.push({role:'user',text:message});
-  const tomorrow=S.addDays(new Date(),1),tomorrowKey=S.key(tomorrow);
-  const changed=message.match(/(?:class|lecture|lab|tutorial).*(?:tomorrow).*(?:from)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s+(?:to)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
   let response;
-  if(changed) {
-    const convert=(h,m,period)=>{let hour=Number(h);if(period?.toLowerCase()==='pm'&&hour<12)hour+=12;if(period?.toLowerCase()==='am'&&hour===12)hour=0;return `${String(hour).padStart(2,'0')}:${m||'00'}`;};
-    const oldTime=convert(changed[1],changed[2],changed[3]),newTime=convert(changed[4],changed[5],changed[6]);
-    const existing=S.timetableService.eventsOn(state.schedule,tomorrow).find(e=>e.start===oldTime);
-    if(existing){const duration=S.mins(existing.end)-S.mins(existing.start),newEnd=S.time(S.mins(newTime)+duration);state.schedule.push({...existing,id:crypto.randomUUID(),date:tomorrowKey,replacesId:existing.id,start:newTime,end:newEnd});response={text:`Updated ${existing.title} tomorrow to ${newTime}–${newEnd}. Your other classes remain fixed; I’ve recomputed the next four days.`};}
-    else response={text:`I couldn’t find a class starting at ${oldTime} tomorrow. Open Timetable to add or edit the right event; I won’t guess which commitment to change.`};
+  if(S.timetableService.isChangeRequest(message)) {
+    response=S.timetableService.changeFromChat(state.schedule,message);
+    if(response.schedule){state.schedule=response.schedule;cancelTimetableDraft();setText('ocr-status','Saved timetable updated through Coach. Reopen the editor to make further changes.');scheduleChanged();}
   } else {
     const move=message.match(/(?:move|change).*(?:workout|walk|session).*(?:to|at)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-    if(move){let hour=Number(move[1]);if(move[3]?.toLowerCase()==='pm'&&hour<12)hour+=12;if(move[3]?.toLowerCase()==='am'&&hour===12)hour=0;const requested=`${String(hour).padStart(2,'0')}:${move[2]||'00'}`;const fixed=S.timetableService.eventsOn(state.schedule,new Date());if(fixed.some(e=>S.mins(requested)>=S.mins(e.start)&&S.mins(requested)<S.mins(e.end)))response={text:`${requested} overlaps a fixed commitment today. I’ve left your timetable unchanged; suggest another free time.`};else{state.preferences.workoutTime=requested;response={text:`I’ll prefer ${requested} for movement when it fits around your fixed commitments. You can change this again anytime.`};}}
+    if(move){
+      const requested=S.timetableService.clock(`${move[1]}:${move[2]||'00'}${move[3]||''}`);
+      const proposed=S.plannerAgent.build(studentProfile(),state.schedule,entries(),state.temporary,{...state.preferences,workoutTime:requested,preferredDuration:S.learningAgent.preferredDuration(state.actions)})[0]?.items.find(i=>i.id.startsWith('movement-'));
+      if(!requested)response={text:'Please use a valid time such as 09:00 or 2 PM.'};
+      else if(proposed?.time!==requested)response={text:`The full movement session does not fit at ${requested}. ${proposed?'A free window is '+proposed.time+'–'+proposed.end+'.':'No open movement window was found today.'} Your saved preference is unchanged.`};
+      else{state.preferences.workoutTime=requested;state.aiAnalysis=null;response={text:`Movement now prefers ${proposed.time}–${proposed.end} today. On other days I’ll use that time when the full session fits your fixed commitments.`};}
+    }
     else {response=S.coachAgent.reply(message,{plan:studentPlan(),profile:studentProfile(),health:S.healthAgent.analyse(entries()),pattern:S.patternAgent.find(state.profile?state.entries:[],state.temporary)});if(response.action==='recovery'){const dayName=message.match(/\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b/i)?.[1];if(dayName){const target=S.days.findIndex(d=>d.toLowerCase()===dayName.slice(0,3).toLowerCase()),offset=(target-new Date().getDay()+7)%7;state.recoveryFrom=S.key(S.addDays(new Date(),offset));}else state.recoveryFrom=null;}}
   }
   state.chat.push({role:'coach',text:response.text,evidence:response.evidence||null});persist();renderDashboard();
@@ -188,16 +217,25 @@ document.addEventListener('click',event=>{
   const skip=event.target.closest('[data-skip]');if(skip){const id=skip.dataset.skip;state.actions=state.actions.filter(a=>a.id!==id);state.actions.push({id,date:id.slice(-10),status:'skipped',source:'user'});persist();renderStudentPanels();toast('No problem. Pace will keep the next suggestion manageable.');return;}
   if(event.target.closest('[data-simulate-sync]')){const item=studentPlan()[0]?.items.find(i=>i.id.startsWith('movement-'));if(item){const mockRecord=S.trackerAdapter.normalize({timestamp:`${dayKey()}T${item.time}:00`,workouts:[{started_at:`${dayKey()}T${item.time}:00`,duration_minutes:item.minutes,type:'walk'}]},'demo tracker');const match=S.learningAgent.detect(studentPlan(),[mockRecord])[0];if(match){state.actions=state.actions.filter(a=>a.id!==match.id);state.actions.push({...match,status:'completed'});if(!state.completed.includes(dayKey()))state.completed.push(dayKey());persist();renderDashboard();toast('Demo tracker activity matched the plan and marked it complete.');}}return;}
   const remove=event.target.closest('[data-remove-row]');if(remove){draftEvents.splice(Number(remove.dataset.removeRow),1);renderTimetableRows();return;}
-  const question=event.target.closest('[data-question]');if(question){showView('coach');const message=question.dataset.question;if(/class tomorrow changed|(?:move|change).*(?:workout|walk|session).*(?:to|at)\s+\d/i.test(message))handleCoachMessage(message);else if(window.PaceAI)window.PaceAI.coach(message);else handleCoachMessage(message);return;}
+  const question=event.target.closest('[data-question]');if(question){showView('coach');sendCoachMessage(question.dataset.question);return;}
 });
 $('#load-demo').addEventListener('click',loadAlexDemo);
 $('#choose-timetable').addEventListener('click',()=>$('#timetable-file').click());
-$('#timetable-file').addEventListener('change',event=>extractTimetable(event.target.files[0]));
-$('#load-demo-timetable').addEventListener('click',()=>{draftEvents=demoEvents.map(e=>({...e,id:crypto.randomUUID()}));renderTimetableRows();setText('ocr-status','Alex demo events loaded. Review and confirm to use them.');});
-$('#add-event').addEventListener('click',()=>{draftEvents.push({id:crypto.randomUUID(),day:'Mon',start:'09:00',end:'10:00',title:'New class or activity',location:'',fixed:true});renderTimetableRows();});
+$('#timetable-file').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';extractTimetable(file);});
+$('#load-demo-timetable').addEventListener('click',()=>{beginTimetableDraft(demoEvents.map(e=>({...e,id:crypto.randomUUID()})));setText('ocr-status','Demo events replace your saved timetable only when confirmed.');});
+$('#edit-timetable').addEventListener('click',()=>{beginTimetableDraft(state.schedule,Array.isArray(state.regularSchedule));setText('ocr-status','Editing saved events. Confirm to save, or cancel to keep your existing timetable.');$('.timetable-review').scrollIntoView({behavior:'smooth',block:'center'});});
+$('#cancel-timetable').addEventListener('click',()=>{cancelTimetableDraft();setText('ocr-status','Changes cancelled. Your saved timetable is unchanged.');});
+$('#add-event').addEventListener('click',()=>{if(!draftReady)beginTimetableDraft(state.schedule,Array.isArray(state.regularSchedule));draftEvents.push({id:crypto.randomUUID(),day:'Mon',start:'09:00',end:'10:00',title:'New class or activity',location:'',fixed:true});renderTimetableRows();});
 $('#timetable-rows').addEventListener('input',readDraftRow);
 $('#timetable-rows').addEventListener('change',readDraftRow);
-$('#confirm-timetable').addEventListener('click',()=>{if(!draftEvents.length){toast('Add or extract at least one event.');return;}if(draftEvents.some(e=>!e.title?.trim()||!e.start||!e.end||S.mins(e.end)<=S.mins(e.start))){toast('Review each event’s name and time.');return;}if($('#exam-timetable').checked){if(!state.temporary?.active)state.regularSchedule=[...state.schedule];state.temporary={active:true,label:'Exam period',learning:'pause',started:dayKey()};}state.schedule=draftEvents.map(e=>({...e,title:e.title.trim(),location:e.location?.trim()||'',fixed:true}));draftEvents=[];persist();renderTimetableRows();renderDashboard();toast('Timetable confirmed. Your plan now works around these events.');showView('plan');});
-$('#chat-form').addEventListener('submit',event=>{event.preventDefault();const input=$('#chat-input'),message=input.value;input.value='';if(/(?:class|lecture|lab|tutorial).*tomorrow.*from|(?:move|change).*(?:workout|walk|session).*(?:to|at)\s+\d/i.test(message))handleCoachMessage(message);else if(window.PaceAI)window.PaceAI.coach(message);else handleCoachMessage(message);});
+$('#confirm-timetable').addEventListener('click',()=>{
+  if(ocrPending||!draftReady)return;
+  if(!draftEvents.length&&!window.confirm('Remove all events from this timetable?'))return;
+  const error=S.timetableService.replace(state,draftEvents,$('#exam-timetable').checked);
+  if(error){setText('ocr-status',error);toast(error);return;}
+  cancelTimetableDraft();scheduleChanged();setText('ocr-status','Timetable saved. Your four-day plan now uses these events.');toast('Timetable saved and plan updated.');showView('plan');
+});
+$('#chat-form').addEventListener('submit',event=>{event.preventDefault();const input=$('#chat-input'),message=input.value;input.value='';sendCoachMessage(message);});
+renderTimetableRows();
 renderDashboard();
 if(!state.profile&&!sessionStorage.getItem('paceWelcomeSeen'))openModal('welcome');

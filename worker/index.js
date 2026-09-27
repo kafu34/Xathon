@@ -19,14 +19,14 @@ function contextOf(raw) {
     date:cut(row.date,10),sleep:number(row.sleep,0,12),steps:number(row.steps,0,50000),activity:number(row.activity,0,600),stress:number(row.stress,1,5),hr:number(row.hr,35,120),energy:number(row.energy,1,5),temporary:row.temporary?cut(row.temporary,50):null
   })).filter(row=>Number.isFinite(dateMs(row.date))).sort((a,b)=>a.date.localeCompare(b.date));
   const plan=(Array.isArray(raw?.plan)?raw.plan:[]).slice(0,4).map(day=>({date:cut(day.date,10),items:(Array.isArray(day.items)?day.items:[]).slice(0,16).map(item=>({id:cut(item.id,60),kind:item.kind==='fixed'?'fixed':'suggestion',time:cut(item.time,5),end:cut(item.end,5),title:cut(item.title,80),reason:cut(item.reason,180),evidence:cut(item.evidence,20)})).filter(item=>/^\d\d:\d\d$/.test(item.time)&&/^\d\d:\d\d$/.test(item.end))})).filter(day=>Number.isFinite(dateMs(day.date)));
-  return {profile:{age:number(profile.age,13,100),goals:(Array.isArray(profile.goals)?profile.goals:[profile.goal]).filter(Boolean).slice(0,4).map(v=>cut(v,60)),bedtime:cut(profile.bedtime,5),lifestyle:cut(profile.lifestyle,350),conditions:cut(profile.conditions,120),injuries:cut(profile.injuries,120)},entries,plan,temporary:raw?.temporary?.active?{label:cut(raw.temporary.label,50),learning:cut(raw.temporary.learning,30)}:null,actions:(Array.isArray(raw?.actions)?raw.actions:[]).slice(-20).map(a=>({date:cut(a.date,10),status:a.status==='completed'?'completed':'skipped',minutes:number(a.minutes,0,600)})),demo:!!raw?.demo};
+  return {profile:{age:number(profile.age,13,100),goals:(Array.isArray(profile.goals)?profile.goals:[profile.goal]).filter(Boolean).slice(0,4).map(v=>cut(v,60)),bedtime:cut(profile.bedtime,5),lifestyle:cut(profile.lifestyle,350),conditions:cut(profile.conditions,120),injuries:cut(profile.injuries,120)},entries,plan,temporary:raw?.temporary?.active?{label:cut(raw.temporary.label,50),learning:cut(raw.temporary.learning,30),started:Number.isFinite(dateMs(raw.temporary.started))?cut(raw.temporary.started,10):null}:null,actions:(Array.isArray(raw?.actions)?raw.actions:[]).slice(-20).map(a=>({date:cut(a.date,10),status:a.status==='completed'?'completed':'skipped',minutes:number(a.minutes,0,600)})),demo:!!raw?.demo};
 }
 function followThrough(actions) {
   const completed=actions.filter(a=>a.status==='completed');
   return {completed:completed.length,skipped:actions.length-completed.length,completedMinutes:completed.map(a=>a.minutes).filter(v=>v!==null).slice(-8)};
 }
 function forecast(entries,temporary) {
-  const baseline=entries.filter(row=>temporary?.learning==='temporary-baseline'?row.temporary===temporary.label:!row.temporary);
+  const baseline=entries.filter(row=>temporary?.learning==='temporary-baseline'?row.temporary===temporary.label&&(!temporary.started||row.date>=temporary.started):!row.temporary);
   return Object.entries(LIMITS).flatMap(([metric,[min,max,cap,spread,unit]])=>{
     const rows=baseline.filter(row=>row[metric]!==null).slice(-14);
     if(rows.length<4 || dateMs(rows.at(-1).date)-dateMs(rows[0].date)<3*86400000)return [];

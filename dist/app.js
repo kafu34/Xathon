@@ -19,7 +19,7 @@ const sampleEntries = [
 const sampleProfile = {name:'',goal:'Build consistency',about:'',routine:'Work',start:'09:00',end:'17:00',days:['Mon','Tue','Wed','Thu','Fri'],bedtime:'23:00',wake:'07:00',baselineHr:58};
 let saved;
 try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch { saved = null; }
-const state = saved && saved.profile ? saved : {profile:null,entries:[],completed:[]};
+const state = saved && Array.isArray(saved.entries) ? saved : {profile:null,entries:[],completed:[]};
 let setupStep = 1;
 let draftProfile = null;
 let lastFocus = null;
